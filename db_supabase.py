@@ -88,13 +88,15 @@ def get_all_marketing_activities():
         st.error(f"Error mengambil data aktivitas: {e}")
         return []
 
-def get_marketing_activities_by_username(username):
+def get_marketing_activities_by_user_id(user_id):
+    """Mengambil aktivitas pemasaran berdasarkan ID pengguna."""
     supabase = init_connection()
     try:
-        response = supabase.from_("marketing_activities").select("*").eq("marketer_username", username).order("created_at", desc=True).execute()
+        # Mencari berdasarkan kolom BARU yaitu 'marketer_id'
+        response = supabase.from_("marketing_activities").select("*").eq("marketer_id", user_id).order("created_at", desc=True).execute()
         return response.data
     except Exception as e:
-        st.error(f"Error mengambil data aktivitas untuk {username}: {e}")
+        st.error(f"Error mengambil data aktivitas untuk pengguna: {e}")
         return []
 
 def get_activity_by_id(activity_id):

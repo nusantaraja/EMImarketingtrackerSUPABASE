@@ -69,7 +69,7 @@ def page_dashboard():
     col1.metric("Total Aktivitas", len(df))
     col2.metric("Total Prospek Unik", df['prospect_name'].nunique())
     if profile.get('role') == 'superadmin':
-        col3.metric("Jumlah Tim Marketing", df['marketer_username'].nunique())
+        col3.metric("Jumlah Tim Marketing", df['marketer_id'].nunique())
 
     st.subheader("Analisis Aktivitas")
     col1, col2 = st.columns(2)
@@ -91,7 +91,7 @@ def page_activities_management():
     st.title("Manajemen Aktivitas Pemasaran")
     profile = st.session_state.profile
 
-    activities = db.get_all_marketing_activities() if profile.get('role') == 'superadmin' else db.get_marketing_activities_by_username(st.session_state.user.email.split('@')[0])
+    activities = db.get_all_marketing_activities() if profile.get('role') == 'superadmin' else db.get_marketing_activities_by_user_id(st.session_state.user.id)
     
     options = {act['id']: f"{act['prospect_name']} (Status: {STATUS_MAPPING.get(act['status'], 'N/A')})" for act in activities}
     options[0] = "<< Tambah Aktivitas Baru >>"
@@ -209,7 +209,7 @@ def page_user_management():
             full_name = st.text_input("Nama Lengkap")
             email = st.text_input("Email")
             password = st.text_input("Password", type="password")
-            role = st.selectbox("Role", ["marketing", "superadmin"])
+            role = st.selectbox("Role", ["marketing", "manager", "superadmin"])
             if st.form_submit_button("Daftarkan Pengguna Baru"):
                 if not all([full_name, email, password]):
                     st.error("Semua field wajib diisi!")

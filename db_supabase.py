@@ -17,13 +17,10 @@ def init_connection() -> Client:
         return None
 
 # --- Fungsi Autentikasi dan Pengguna ---
-# - DIPERBARUI: Menggunakan Supabase Auth sepenuhnya
-
 def sign_up(email, password, full_name, role='marketing', manager_id=None):
     """Mendaftarkan pengguna baru via Supabase Auth."""
     supabase = init_connection()
     try:
-        # Mendaftarkan user di sistem Auth, sambil menyelipkan data tambahan (metadata)
         res = supabase.auth.sign_up({
             "email": email,
             "password": password,
@@ -35,7 +32,6 @@ def sign_up(email, password, full_name, role='marketing', manager_id=None):
                 }
             }
         })
-        # Fungsi trigger di database akan otomatis membuat profilnya
         return True, "Pengguna berhasil didaftarkan. Silakan cek email untuk verifikasi.", res.user
     except Exception as e:
         return False, f"Gagal mendaftarkan pengguna: {e}", None
@@ -45,15 +41,14 @@ def sign_in(email, password):
     supabase = init_connection()
     try:
         res = supabase.auth.sign_in_with_password({"email": email, "password": password})
-        # Setelah login, ambil profilnya untuk mendapatkan role
         profile = get_user_profile(res.user.id)
         if profile:
-            # Gabungkan info dari auth dan profile
             user_data = {
                 'id': res.user.id,
                 'email': res.user.email,
                 'full_name': profile.get('full_name'),
-                'role': profile.get('role')
+                'role': profile.get('role'),
+                'manager_id': profile.get('manager_id')
             }
             return True, "Login berhasil!", user_data
         else:
@@ -94,7 +89,7 @@ def update_user_profile(user_id, full_name, role, manager_id):
     """Memperbarui profil pengguna oleh Admin."""
     supabase = init_connection()
     try:
-        res = supabase.from_('profiles').update({
+        supabase.from_('profiles').update({
             'full_name': full_name,
             'role': role,
             'manager_id': manager_id
@@ -107,14 +102,12 @@ def delete_user(user_id):
     """Menghapus pengguna dari sistem (hanya bisa dilakukan oleh Superadmin di backend)."""
     supabase_admin = create_client(st.secrets["supabase"]["url"], st.secrets["supabase"]["service_role_key"])
     try:
-        # Menghapus dari Supabase Auth akan otomatis menghapus dari profiles berkat trigger ON DELETE CASCADE
-        res = supabase_admin.auth.admin.delete_user(user_id)
+        supabase_admin.auth.admin.delete_user(user_id)
         return True, "Pengguna berhasil dihapus."
     except Exception as e:
         return False, f"Gagal menghapus pengguna: {e}"
 
-# --- Fungsi Logika Tim (BARU) ---
-
+# --- Fungsi Logika Tim ---
 def get_team_member_ids(manager_id):
     """Mengambil daftar ID dari anggota tim seorang manajer."""
     supabase = init_connection()
@@ -125,71 +118,68 @@ def get_team_member_ids(manager_id):
         st.error(f"Gegal mengambil anggota tim: {e}")
         return []
 
-# --- Fungsi Aktivitas Pemasaran (CRUD) - DIPERBARUI ---
-
+# --- Fungsi Aktivitas Pemasaran (CRUD) ---
 def get_all_marketing_activities():
-    """Untuk Superadmin: Mengambil semua aktivitas pemasaran."""
     supabase = init_connection()
     try:
-        response = supabase.from_("marketing_activities").select("*").order("created_at", desc=True).execute()
+        response = supabase.from_("marketing_activities").select("*, profiles(full_name)").order("created_at", desc=True).execute()
         return response.data
     except Exception as e:
         st.error(f"Error mengambil semua data aktivitas: {e}")
         return []
 
 def get_activities_for_manager(manager_id):
-    """Untuk Manager: Mengambil aktivitas dari timnya."""
     supabase = init_connection()
     team_ids = get_team_member_ids(manager_id)
     if not team_ids:
         return []
     try:
-        response = supabase.from_("marketing_activities").select("*").in_("marketer_id", team_ids).order("created_at", desc=True).execute()
+        response = supabase.from_("marketing_activities").select("*, profiles(full_name)").in_("marketer_id", team_ids).order("created_at", desc=True).execute()
         return response.data
     except Exception as e:
         st.error(f"Error mengambil data aktivitas tim: {e}")
         return []
 
 def get_marketing_activities_by_user(user_id):
-    """Untuk Marketing: Mengambil aktivitas miliknya sendiri."""
     supabase = init_connection()
     try:
-        response = supabase.from_("marketing_activities").select("*").eq("marketer_id", user_id).order("created_at", desc=True).execute()
+        response = supabase.from_("marketing_activities").select("*, profiles(full_name)").eq("marketer_id", user_id).order("created_at", desc=True).execute()
         return response.data
     except Exception as e:
         st.error(f"Error mengambil data aktivitas untuk {user_id}: {e}")
         return []
 
-def add_marketing_activity(marketer_id, prospect_name, **kwargs):
-    """Menambahkan aktivitas baru."""
+def add_marketing_activity(marketer_id, data_dict):
     supabase = init_connection()
     try:
-        data_to_insert = {"marketer_id": marketer_id, "prospect_name": prospect_name, **kwargs}
+        data_to_insert = {"marketer_id": marketer_id, **data_dict}
         response = supabase.from_("marketing_activities").insert(data_to_insert).execute()
         if response.data:
             return True, "Aktivitas berhasil ditambahkan.", response.data[0]['id']
         else:
-            return False, f"Gagal: {getattr(response, 'error', 'Unknown error')}", None
+            return False, f"Gagal menambahkan aktivitas: {getattr(response, 'error', 'Unknown error')}", None
     except Exception as e:
         return False, f"Terjadi error: {e}", None
 
 def edit_marketing_activity(activity_id, data_to_update):
-    """Mengedit aktivitas yang ada."""
     supabase = init_connection()
     try:
         response = supabase.from_("marketing_activities").update(data_to_update).eq("id", activity_id).execute()
         if response.data:
             return True, "Aktivitas berhasil diperbarui."
         else:
-            return False, f"Gagal: {getattr(response, 'error', 'Unknown error')}"
+            return False, f"Gagal memperbarui aktivitas: {getattr(response, 'error', 'Unknown error')}"
     except Exception as e:
         return False, f"Terjadi error: {e}"
 
-# Fungsi lain seperti delete_marketing_activity, get_followups, add_followup tetap sama secara konsep
-# Cukup pastikan mereka menggunakan `init_connection()` di awal.
-
-def get_followups_by_activity_id(activity_id):
+def delete_marketing_activity(activity_id):
     supabase = init_connection()
-    # ... implementasi sama seperti sebelumnya ...
-    pass
-# ... dan seterusnya ...
+    try:
+        # Hapus follow-up dulu jika ada, baru aktivitasnya
+        supabase.from_("followups").delete().eq("activity_id", activity_id).execute()
+        response = supabase.from_("marketing_activities").delete().eq("id", activity_id).execute()
+        if response.data:
+            return True, "Aktivitas berhasil dihapus."
+        return False, f"Gagal menghapus aktivitas: {getattr(response, 'error', 'Unknown error')}"
+    except Exception as e:
+        return False, f"Terjadi error: {e}"

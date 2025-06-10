@@ -114,6 +114,8 @@ def show_dashboard():
                 st.info("Belum ada jenis aktivitas yang tercatat.")
 
 # --- Halaman Manajemen Aktivitas ---
+# Ganti fungsi lama di app_supabase.py dengan ini
+
 def show_activity_management_page():
     user = st.session_state.user
     role = user.get('role')
@@ -132,7 +134,9 @@ def show_activity_management_page():
     else:
         df = pd.DataFrame(activities)
         df['marketer_name'] = df['profiles'].apply(lambda x: x['full_name'] if x else 'N/A')
-        st.dataframe(df[['created_at', 'marketer_name', 'prospect_name', 'activity_type', 'status']], use_container_width=True)
+        # Tampilkan kolom yang lebih relevan
+        display_cols = ['created_at', 'marketer_name', 'prospect_name', 'activity_date', 'activity_type', 'status']
+        st.dataframe(df[display_cols], use_container_width=True)
     st.divider()
 
     activity_to_edit = None
@@ -146,24 +150,64 @@ def show_activity_management_page():
     with st.form(key="activity_form"):
         st.subheader("Edit Aktivitas" if activity_to_edit else "Tambah Aktivitas Baru")
         
-        prospect_name = st.text_input("Nama Prospek", value=activity_to_edit['prospect_name'] if activity_to_edit else "")
-        status = st.selectbox("Status", ["baru", "dalam_proses", "berhasil", "gagal"], index=["baru", "dalam_proses", "berhasil", "gagal"].index(activity_to_edit['status']) if activity_to_edit else 0)
+        # --- FORM DETAIL SESUAI CSV ---
+        # Kelompokkan dalam kolom agar rapi
+        col1, col2 = st.columns(2)
+
+        with col1:
+            prospect_name = st.text_input("Nama Prospek*", value=activity_to_edit['prospect_name'] if activity_to_edit else "")
+            prospect_location = st.text_input("Lokasi Prospek", value=activity_to_edit.get('prospect_location', '') if activity_to_edit else "")
+            contact_person = st.text_input("Nama Kontak", value=activity_to_edit.get('contact_person', '') if activity_to_edit else "")
+            contact_position = st.text_input("Jabatan Kontak", value=activity_to_edit.get('contact_position', '') if activity_to_edit else "")
+            contact_phone = st.text_input("Telepon Kontak", value=activity_to_edit.get('contact_phone', '') if activity_to_edit else "")
+            contact_email = st.text_input("Email Kontak", value=activity_to_edit.get('contact_email', '') if activity_to_edit else "")
         
+        with col2:
+            default_date = datetime.strptime(activity_to_edit['activity_date'], '%Y-%m-%d') if activity_to_edit and activity_to_edit.get('activity_date') else datetime.today()
+            activity_date = st.date_input("Tanggal Aktivitas*", value=default_date)
+            
+            activity_type_options = ["Telepon", "Meeting", "Presentasi", "Demo Produk", "Email", "Lainnya"]
+            type_index = activity_type_options.index(activity_to_edit['activity_type']) if activity_to_edit and activity_to_edit.get('activity_type') in activity_type_options else 0
+            activity_type = st.selectbox("Jenis Aktivitas*", activity_type_options, index=type_index)
+
+            status_options = ["baru", "dalam_proses", "berhasil", "gagal"]
+            status_index = status_options.index(activity_to_edit['status']) if activity_to_edit and activity_to_edit.get('status') in status_options else 0
+            status = st.selectbox("Status*", status_options, index=status_index)
+        
+        description = st.text_area("Deskripsi / Catatan*", value=activity_to_edit.get('description', '') if activity_to_edit else "")
+        
+        # Tombol submit
         submitted = st.form_submit_button("Simpan Aktivitas")
         
         if submitted:
-            data_dict = {"prospect_name": prospect_name, "status": status}
-            if activity_to_edit:
-                success, message = db.edit_marketing_activity(activity_to_edit['id'], data_dict)
+            if not prospect_name or not activity_date or not activity_type or not description:
+                st.error("Mohon isi semua field yang bertanda bintang (*).")
             else:
-                success, message, new_id = db.add_marketing_activity(marketer_id=user['id'], data_dict=data_dict)
-            
-            if success:
-                st.success(message)
-                st.rerun()
-            else:
-                st.error(message)
+                data_dict = {
+                    "prospect_name": prospect_name,
+                    "prospect_location": prospect_location,
+                    "contact_person": contact_person,
+                    "contact_position": contact_position,
+                    "contact_phone": contact_phone,
+                    "contact_email": contact_email,
+                    "activity_date": activity_date.strftime('%Y-%m-%d'),
+                    "activity_type": activity_type,
+                    "status": status,
+                    "description": description
+                }
+                
+                if activity_to_edit:
+                    success, message = db.edit_marketing_activity(activity_to_edit['id'], data_dict)
+                else:
+                    success, message, new_id = db.add_marketing_activity(marketer_id=user['id'], data_dict=data_dict)
+                
+                if success:
+                    st.success(message)
+                    st.rerun()
+                else:
+                    st.error(message)
 
+    # Opsi Hapus
     if activity_to_edit and role == 'superadmin':
         st.divider()
         if st.button(f"Hapus Aktivitas '{activity_to_edit['prospect_name']}'", type="primary"):

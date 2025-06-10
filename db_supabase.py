@@ -156,3 +156,13 @@ def add_followup(activity_id, data_dict):
         else: return False, f"Gagal menambahkan follow-up: {getattr(response, 'error', 'Unknown error')}"
     except Exception as e:
         return False, f"Terjadi error: {e}"
+
+# Tambahkan fungsi ini di db_supabase.py
+def get_all_followups():
+    supabase = init_connection()
+    try:
+        # Mengambil data followups dan menggabungkannya dengan nama prospek dari marketing_activities
+        response = supabase.from_("followups").select("*, marketing_activities(prospect_name)").order("created_at", desc=True).execute()
+        return response.data
+    except Exception as e:
+        st.error(f"Error mengambil semua data follow-up: {e}"); return []

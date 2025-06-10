@@ -4,42 +4,83 @@ import streamlit as st
 from supabase import create_client, Client
 from datetime import datetime
 
-# --- Inisialisasi Client Supabase ---
-# Fungsi ini akan dipanggil nanti, bukan saat import
+# --- Inisialisasi Koneksi ---
 @st.cache_resource
 def init_connection() -> Client:
-    """Initialize and return the Supabase client."""
     try:
         url = st.secrets["supabase"]["url"]
         key = st.secrets["supabase"]["key"]
         return create_client(url, key)
     except Exception as e:
-        # Kita tidak bisa menggunakan st.error() di sini.
-        # Jika koneksi gagal, aplikasi tidak akan bisa berjalan.
-        # Error akan muncul di log Streamlit Cloud.
+        st.error("Gagal terhubung ke Supabase. Periksa file secrets.toml atau Secrets di Streamlit Cloud.")
         raise e
 
-# --- Fungsi Autentikasi dan Pengguna ---
+# --- Fungsi Autentikasi Profesional ---
+def sign_in(email, password):
+    """Melakukan sign-in menggunakan Supabase Auth."""
+    supabase = init_connection()
+    try:
+        response = supabase.auth.sign_in_with_password({"email": email, "password": password})
+        return response.user, None
+    except Exception as e:
+        return None, str(e)
 
-# Untuk kesederhanaan, kita tetap pakai user yang di-hardcode.
-USERS = {
-    "admin": {"name": "Admin Utama", "role": "superadmin"},
-    "marketing_test": {"name": "Marketing Test", "role": "marketing"}
-}
+def sign_up(email, password, full_name, role):
+    """Mendaftarkan pengguna baru menggunakan Supabase Auth."""
+    supabase = init_connection()
+    try:
+        # Mendaftarkan user ke auth.users, sambil menyisipkan data tambahan
+        response = supabase.auth.sign_up(
+            {
+                "email": email, 
+                "password": password,
+                "options": {
+                    "data": {
+                        "full_name": full_name,
+                        "role": role
+                    }
+                }
+            }
+        )
+        return response.user, None
+    except Exception as e:
+        return None, str(e)
 
-def login(username):
-    """Simulates login by returning user info if username exists."""
-    return USERS.get(username)
+def get_profile(user_id):
+    """Mengambil profil (termasuk role) dari pengguna."""
+    supabase = init_connection()
+    try:
+        response = supabase.from_("profiles").select("*").eq("id", user_id).single().execute()
+        return response.data
+    except Exception:
+        return None
 
-def get_all_users():
-    """Returns the hardcoded list of users."""
-    return [{"username": u, **i} for u, i in USERS.items()]
+# --- Fungsi Manajemen Pengguna (Untuk Superadmin) ---
+def get_all_profiles():
+    """Mengambil semua profil pengguna dari tabel profiles."""
+    supabase = init_connection()
+    try:
+        response = supabase.from_("profiles").select("*").execute()
+        return response.data
+    except Exception as e:
+        st.error(f"Gagal mengambil data pengguna: {e}")
+        return []
 
-# --- Fungsi Aktivitas Pemasaran (CRUD) ---
+def delete_user_by_id(user_id):
+    """Menghapus pengguna oleh Admin."""
+    # Ini memerlukan kunci service_role yang harus disimpan dengan aman
+    # Untuk sementara, fitur ini kita tandai untuk pengembangan selanjutnya.
+    # supabase_admin = create_client(st.secrets["supabase"]["url"], st.secrets["supabase"]["service_key"])
+    # supabase_admin.auth.admin.delete_user(user_id)
+    return False, "Fitur Hapus Pengguna sedang dalam pengembangan."
+
+
+# --- Fungsi CRUD Aktivitas & Follow-up (Tetap Sama) ---
+# ... (Semua fungsi CRUD yang sudah ada sebelumnya bisa ditaruh di sini) ...
+# ... Mari kita salin ulang dengan sedikit penyesuaian ...
 
 def get_all_marketing_activities():
-    """Mengambil semua aktivitas pemasaran dari Supabase."""
-    supabase = init_connection() # Panggil koneksi di dalam fungsi
+    supabase = init_connection()
     try:
         response = supabase.from_("marketing_activities").select("*").order("created_at", desc=True).execute()
         return response.data
@@ -48,8 +89,7 @@ def get_all_marketing_activities():
         return []
 
 def get_marketing_activities_by_username(username):
-    """Mengambil aktivitas pemasaran berdasarkan username marketing."""
-    supabase = init_connection() # Panggil koneksi di dalam fungsi
+    supabase = init_connection()
     try:
         response = supabase.from_("marketing_activities").select("*").eq("marketer_username", username).order("created_at", desc=True).execute()
         return response.data
@@ -58,8 +98,7 @@ def get_marketing_activities_by_username(username):
         return []
 
 def get_activity_by_id(activity_id):
-    """Mengambil satu aktivitas berdasarkan ID-nya."""
-    supabase = init_connection() # Panggil koneksi di dalam fungsi
+    supabase = init_connection()
     try:
         response = supabase.from_("marketing_activities").select("*").eq("id", activity_id).single().execute()
         return response.data
@@ -67,95 +106,54 @@ def get_activity_by_id(activity_id):
         st.error(f"Error mengambil detail aktivitas: {e}")
         return None
 
-def add_marketing_activity(marketer_username, prospect_name, prospect_location, contact_person,
-                           contact_position, contact_phone, contact_email, activity_date,
-                           activity_type, description, status):
-    """Menambahkan aktivitas pemasaran baru ke Supabase."""
-    supabase = init_connection() # Panggil koneksi di dalam fungsi
+def add_marketing_activity(marketer_id, marketer_username, prospect_name, prospect_location, contact_person, contact_position, contact_phone, contact_email, activity_date, activity_type, description, status):
+    supabase = init_connection()
     try:
-        if isinstance(activity_date, datetime):
-            activity_date_str = activity_date.strftime("%Y-%m-%d")
-        else:
-            activity_date_str = str(activity_date)
-
+        activity_date_str = activity_date.strftime("%Y-%m-%d") if isinstance(activity_date, datetime) else str(activity_date)
         response = supabase.from_("marketing_activities").insert({
+            "marketer_id": marketer_id,
             "marketer_username": marketer_username,
-            "prospect_name": prospect_name,
-            "prospect_location": prospect_location,
-            "contact_person": contact_person,
-            "contact_position": contact_position,
-            "contact_phone": contact_phone,
-            "contact_email": contact_email,
-            "activity_date": activity_date_str,
-            "activity_type": activity_type,
-            "description": description,
-            "status": status
+            "prospect_name": prospect_name, "prospect_location": prospect_location,
+            "contact_person": contact_person, "contact_position": contact_position,
+            "contact_phone": contact_phone, "contact_email": contact_email,
+            "activity_date": activity_date_str, "activity_type": activity_type,
+            "description": description, "status": status
         }).execute()
-
-        if response.data:
-            return True, "Aktivitas berhasil ditambahkan.", response.data[0]['id']
-        else:
-            if hasattr(response, 'error') and response.error:
-                return False, f"Gagal menambahkan aktivitas: {response.error.message}", None
-            return False, "Gagal menambahkan aktivitas.", None
-
+        if not response.data: raise Exception(response.error.message if hasattr(response, 'error') else "Unknown error")
+        return True, "Aktivitas berhasil ditambahkan.", response.data[0]['id']
     except Exception as e:
-        return False, f"Terjadi error: {e}", None
+        return False, f"Gagal menambahkan aktivitas: {e}", None
 
-def edit_marketing_activity(activity_id, prospect_name, prospect_location, contact_person,
-                          contact_position, contact_phone, contact_email, activity_date,
-                          activity_type, description, status):
-    """Mengedit aktivitas pemasaran yang ada di Supabase."""
-    supabase = init_connection() # Panggil koneksi di dalam fungsi
+
+def edit_marketing_activity(activity_id, prospect_name, prospect_location, contact_person, contact_position, contact_phone, contact_email, activity_date, activity_type, description, status):
+    supabase = init_connection()
     try:
-        if isinstance(activity_date, datetime):
-            activity_date_str = activity_date.strftime("%Y-%m-%d")
-        else:
-            activity_date_str = str(activity_date)
-
+        activity_date_str = activity_date.strftime("%Y-%m-%d") if isinstance(activity_date, datetime) else str(activity_date)
         response = supabase.from_("marketing_activities").update({
-            "prospect_name": prospect_name,
-            "prospect_location": prospect_location,
-            "contact_person": contact_person,
-            "contact_position": contact_position,
-            "contact_phone": contact_phone,
-            "contact_email": contact_email,
-            "activity_date": activity_date_str,
-            "activity_type": activity_type,
-            "description": description,
-            "status": status
+            "prospect_name": prospect_name, "prospect_location": prospect_location,
+            "contact_person": contact_person, "contact_position": contact_position,
+            "contact_phone": contact_phone, "contact_email": contact_email,
+            "activity_date": activity_date_str, "activity_type": activity_type,
+            "description": description, "status": status
         }).eq("id", activity_id).execute()
-
-        if response.data:
-            return True, "Aktivitas berhasil diperbarui."
-        else:
-            if hasattr(response, 'error') and response.error:
-                return False, f"Gagal memperbarui aktivitas: {response.error.message}"
-            return False, "Gagal memperbarui aktivitas."
+        if not response.data: raise Exception(response.error.message if hasattr(response, 'error') else "Unknown error")
+        return True, "Aktivitas berhasil diperbarui."
     except Exception as e:
-        return False, f"Terjadi error: {e}"
+        return False, f"Gagal memperbarui: {e}"
 
 def delete_marketing_activity(activity_id):
-    """Menghapus aktivitas pemasaran dan follow-up terkait dari Supabase."""
-    supabase = init_connection() # Panggil koneksi di dalam fungsi
+    supabase = init_connection()
     try:
         supabase.from_("followups").delete().eq("activity_id", activity_id).execute()
         response = supabase.from_("marketing_activities").delete().eq("id", activity_id).execute()
-
-        if response.data:
-            return True, "Aktivitas berhasil dihapus."
-        else:
-             if hasattr(response, 'error') and response.error:
-                return False, f"Gagal menghapus aktivitas: {response.error.message}"
-             return False, "Gagal menghapus aktivitas."
+        if not response.data: raise Exception(response.error.message if hasattr(response, 'error') else "Unknown error")
+        return True, "Aktivitas berhasil dihapus."
     except Exception as e:
-        return False, f"Terjadi error: {e}"
+        return False, f"Gagal menghapus: {e}"
 
-# --- Fungsi Follow-up (CRUD) ---
 
 def get_followups_by_activity_id(activity_id):
-    """Mengambil semua follow-up untuk sebuah aktivitas."""
-    supabase = init_connection() # Panggil koneksi di dalam fungsi
+    supabase = init_connection()
     try:
         response = supabase.from_("followups").select("*").eq("activity_id", activity_id).order("created_at", desc=True).execute()
         return response.data
@@ -164,53 +162,33 @@ def get_followups_by_activity_id(activity_id):
         return []
 
 def add_followup(activity_id, marketer_username, notes, next_action, next_followup_date, interest_level, status_update):
-    """Menambahkan follow-up baru dan mengupdate status aktivitas utama."""
-    supabase = init_connection() # Panggil koneksi di dalam fungsi
+    supabase = init_connection()
     try:
         supabase.from_("marketing_activities").update({"status": status_update}).eq("id", activity_id).execute()
-
-        if isinstance(next_followup_date, datetime):
-            next_followup_date_str = next_followup_date.strftime("%Y-%m-%d")
-        else:
-            next_followup_date_str = str(next_followup_date) if next_followup_date else None
-
+        next_followup_date_str = next_followup_date.strftime("%Y-%m-%d") if isinstance(next_followup_date, datetime) else (str(next_followup_date) if next_followup_date else None)
         response = supabase.from_("followups").insert({
-            "activity_id": activity_id,
-            "marketer_username": marketer_username,
-            "notes": notes,
-            "next_action": next_action,
-            "next_followup_date": next_followup_date_str,
-            "interest_level": interest_level
+            "activity_id": activity_id, "marketer_username": marketer_username,
+            "notes": notes, "next_action": next_action,
+            "next_followup_date": next_followup_date_str, "interest_level": interest_level
         }).execute()
-
-        if response.data:
-            return True, "Follow-up berhasil ditambahkan."
-        else:
-            if hasattr(response, 'error') and response.error:
-                return False, f"Gagal menambahkan follow-up: {response.error.message}"
-            return False, "Gagal menambahkan follow-up."
+        if not response.data: raise Exception(response.error.message if hasattr(response, 'error') else "Unknown error")
+        return True, "Follow-up berhasil ditambahkan."
     except Exception as e:
-        return False, f"Terjadi error: {e}"
+        return False, f"Gagal menambahkan follow-up: {e}"
 
-# --- Fungsi Konfigurasi ---
-
+# ... Fungsi config tetap sama ...
 def get_app_config():
-    """Mengambil konfigurasi aplikasi dari Supabase."""
-    supabase = init_connection() # Panggil koneksi di dalam fungsi
+    supabase = init_connection()
     try:
         response = supabase.from_("config").select("*").execute()
         config = {item['key']: item['value'] for item in response.data}
         return config
-    except Exception as e:
-        st.error(f"Error mengambil konfigurasi: {e}")
-        return {"app_name": "Default Tracker"}
+    except Exception: return {"app_name": "Default Tracker"}
 
 def update_app_config(new_config):
-    """Memperbarui konfigurasi di Supabase."""
-    supabase = init_connection() # Panggil koneksi di dalam fungsi
+    supabase = init_connection()
     try:
         for key, value in new_config.items():
             supabase.from_("config").update({"value": value}).eq("key", key).execute()
         return True, "Konfigurasi berhasil diperbarui."
-    except Exception as e:
-        return False, f"Terjadi error: {e}"
+    except Exception as e: return False, f"Error: {e}"

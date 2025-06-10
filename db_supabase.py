@@ -5,7 +5,7 @@ from supabase import create_client, Client
 from datetime import datetime
 
 # --- Inisialisasi Client Supabase ---
-# Fungsi ini akan dipanggil sekali untuk membuat koneksi ke Supabase.
+# Fungsi ini akan dipanggil nanti, bukan saat import
 @st.cache_resource
 def init_connection() -> Client:
     """Initialize and return the Supabase client."""
@@ -14,17 +14,14 @@ def init_connection() -> Client:
         key = st.secrets["supabase"]["key"]
         return create_client(url, key)
     except Exception as e:
-        st.error(f"Gagal terhubung ke Supabase: {e}")
-        return None
-
-supabase = init_connection()
+        # Kita tidak bisa menggunakan st.error() di sini.
+        # Jika koneksi gagal, aplikasi tidak akan bisa berjalan.
+        # Error akan muncul di log Streamlit Cloud.
+        raise e
 
 # --- Fungsi Autentikasi dan Pengguna ---
 
-# Catatan: Untuk aplikasi production, gunakan Supabase Auth (signup/login)
-# Untuk kesederhanaan, kita akan tetap menggunakan sistem login berbasis username
-# dengan asumsi daftar pengguna dikelola secara manual atau di-hardcode.
-
+# Untuk kesederhanaan, kita tetap pakai user yang di-hardcode.
 USERS = {
     "admin": {"name": "Admin Utama", "role": "superadmin"},
     "marketing_test": {"name": "Marketing Test", "role": "marketing"}
@@ -42,6 +39,7 @@ def get_all_users():
 
 def get_all_marketing_activities():
     """Mengambil semua aktivitas pemasaran dari Supabase."""
+    supabase = init_connection() # Panggil koneksi di dalam fungsi
     try:
         response = supabase.from_("marketing_activities").select("*").order("created_at", desc=True).execute()
         return response.data
@@ -51,6 +49,7 @@ def get_all_marketing_activities():
 
 def get_marketing_activities_by_username(username):
     """Mengambil aktivitas pemasaran berdasarkan username marketing."""
+    supabase = init_connection() # Panggil koneksi di dalam fungsi
     try:
         response = supabase.from_("marketing_activities").select("*").eq("marketer_username", username).order("created_at", desc=True).execute()
         return response.data
@@ -60,6 +59,7 @@ def get_marketing_activities_by_username(username):
 
 def get_activity_by_id(activity_id):
     """Mengambil satu aktivitas berdasarkan ID-nya."""
+    supabase = init_connection() # Panggil koneksi di dalam fungsi
     try:
         response = supabase.from_("marketing_activities").select("*").eq("id", activity_id).single().execute()
         return response.data
@@ -71,8 +71,8 @@ def add_marketing_activity(marketer_username, prospect_name, prospect_location, 
                            contact_position, contact_phone, contact_email, activity_date,
                            activity_type, description, status):
     """Menambahkan aktivitas pemasaran baru ke Supabase."""
+    supabase = init_connection() # Panggil koneksi di dalam fungsi
     try:
-        # Pastikan tanggal adalah string dalam format YYYY-MM-DD
         if isinstance(activity_date, datetime):
             activity_date_str = activity_date.strftime("%Y-%m-%d")
         else:
@@ -91,11 +91,10 @@ def add_marketing_activity(marketer_username, prospect_name, prospect_location, 
             "description": description,
             "status": status
         }).execute()
-        
+
         if response.data:
             return True, "Aktivitas berhasil ditambahkan.", response.data[0]['id']
         else:
-            # Cek jika ada error dari API
             if hasattr(response, 'error') and response.error:
                 return False, f"Gagal menambahkan aktivitas: {response.error.message}", None
             return False, "Gagal menambahkan aktivitas.", None
@@ -107,6 +106,7 @@ def edit_marketing_activity(activity_id, prospect_name, prospect_location, conta
                           contact_position, contact_phone, contact_email, activity_date,
                           activity_type, description, status):
     """Mengedit aktivitas pemasaran yang ada di Supabase."""
+    supabase = init_connection() # Panggil koneksi di dalam fungsi
     try:
         if isinstance(activity_date, datetime):
             activity_date_str = activity_date.strftime("%Y-%m-%d")
@@ -125,7 +125,7 @@ def edit_marketing_activity(activity_id, prospect_name, prospect_location, conta
             "description": description,
             "status": status
         }).eq("id", activity_id).execute()
-        
+
         if response.data:
             return True, "Aktivitas berhasil diperbarui."
         else:
@@ -137,9 +137,8 @@ def edit_marketing_activity(activity_id, prospect_name, prospect_location, conta
 
 def delete_marketing_activity(activity_id):
     """Menghapus aktivitas pemasaran dan follow-up terkait dari Supabase."""
+    supabase = init_connection() # Panggil koneksi di dalam fungsi
     try:
-        # Supabase tidak mendukung ON DELETE CASCADE melalui API secara default.
-        # Jadi kita hapus follow-up dulu, baru aktivitasnya.
         supabase.from_("followups").delete().eq("activity_id", activity_id).execute()
         response = supabase.from_("marketing_activities").delete().eq("id", activity_id).execute()
 
@@ -156,6 +155,7 @@ def delete_marketing_activity(activity_id):
 
 def get_followups_by_activity_id(activity_id):
     """Mengambil semua follow-up untuk sebuah aktivitas."""
+    supabase = init_connection() # Panggil koneksi di dalam fungsi
     try:
         response = supabase.from_("followups").select("*").eq("activity_id", activity_id).order("created_at", desc=True).execute()
         return response.data
@@ -165,11 +165,10 @@ def get_followups_by_activity_id(activity_id):
 
 def add_followup(activity_id, marketer_username, notes, next_action, next_followup_date, interest_level, status_update):
     """Menambahkan follow-up baru dan mengupdate status aktivitas utama."""
+    supabase = init_connection() # Panggil koneksi di dalam fungsi
     try:
-        # 1. Update status aktivitas utama
         supabase.from_("marketing_activities").update({"status": status_update}).eq("id", activity_id).execute()
 
-        # 2. Tambahkan follow-up baru
         if isinstance(next_followup_date, datetime):
             next_followup_date_str = next_followup_date.strftime("%Y-%m-%d")
         else:
@@ -197,17 +196,18 @@ def add_followup(activity_id, marketer_username, notes, next_action, next_follow
 
 def get_app_config():
     """Mengambil konfigurasi aplikasi dari Supabase."""
+    supabase = init_connection() # Panggil koneksi di dalam fungsi
     try:
         response = supabase.from_("config").select("*").execute()
-        # Ubah format dari list of dicts ke single dict
         config = {item['key']: item['value'] for item in response.data}
         return config
     except Exception as e:
         st.error(f"Error mengambil konfigurasi: {e}")
-        return {"app_name": "Default Tracker"} # Fallback
+        return {"app_name": "Default Tracker"}
 
 def update_app_config(new_config):
     """Memperbarui konfigurasi di Supabase."""
+    supabase = init_connection() # Panggil koneksi di dalam fungsi
     try:
         for key, value in new_config.items():
             supabase.from_("config").update({"value": value}).eq("key", key).execute()

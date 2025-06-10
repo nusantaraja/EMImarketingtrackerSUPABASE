@@ -183,3 +183,34 @@ def delete_marketing_activity(activity_id):
         return False, f"Gagal menghapus aktivitas: {getattr(response, 'error', 'Unknown error')}"
     except Exception as e:
         return False, f"Terjadi error: {e}"
+    
+    # --- Fungsi Follow-up ---
+    # Tambahkan dua fungsi ini di dalam file db_supabase.py
+
+def get_followups_by_activity_id(activity_id):
+    """Mengambil semua follow-up untuk sebuah aktivitas."""
+    supabase = init_connection()
+    try:
+        response = supabase.from_("followups").select("*").eq("activity_id", activity_id).order("created_at", desc=True).execute()
+        return response.data
+    except Exception as e:
+        st.error(f"Error mengambil data follow-up: {e}")
+        return []
+
+def add_followup(activity_id, data_dict):
+    """Menambahkan follow-up baru dan mengupdate status aktivitas utama."""
+    supabase = init_connection()
+    try:
+        # 1. Update status aktivitas utama dengan status dari form follow-up
+        supabase.from_("marketing_activities").update({"status": data_dict["status_update"]}).eq("id", activity_id).execute()
+
+        # 2. Tambahkan follow-up baru
+        data_to_insert = {"activity_id": activity_id, **data_dict}
+        response = supabase.from_("followups").insert(data_to_insert).execute()
+
+        if response.data:
+            return True, "Follow-up berhasil ditambahkan."
+        else:
+            return False, f"Gagal menambahkan follow-up: {getattr(response, 'error', 'Unknown error')}"
+    except Exception as e:
+        return False, f"Terjadi error: {e}"

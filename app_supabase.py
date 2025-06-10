@@ -4,46 +4,32 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
-import db_supabase as db # Import file database baru kita
+import db_supabase as db
 
-# --- Konfigurasi Halaman ---
-st.set_page_config(
-    page_title="EMI Marketing Tracker",
-    page_icon="💼",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# --- Konfigurasi Halaman & Variabel Global ---
+st.set_page_config(page_title="EMI Marketing Tracker", page_icon="💼", layout="wide")
 
-# --- Mapping Status untuk Tampilan ---
-STATUS_MAPPING = {
-    'baru': 'Baru',
-    'dalam_proses': 'Dalam Proses',
-    'berhasil': 'Berhasil',
-    'gagal': 'Gagal'
-}
+STATUS_MAPPING = {'baru': 'Baru', 'dalam_proses': 'Dalam Proses', 'berhasil': 'Berhasil', 'gagal': 'Gagal'}
 REVERSE_STATUS_MAPPING = {v: k for k, v in STATUS_MAPPING.items()}
 
+# --- Fungsi UI ---
 
-# --- Halaman Login ---
 def show_login_page():
     st.title("EMI Marketing Tracker 💼📊")
     with st.form("login_form"):
-        username = st.text_input("Username")
-        # Password field untuk UI, tapi tidak digunakan untuk auth di versi sederhana ini
-        password = st.text_input("Password", type="password", help="Untuk saat ini, cukup masukkan username yang valid (cth: admin).")
-        submitted = st.form_submit_button("Login")
-
-        if submitted:
+        username = st.text_input("Username", help="Coba login dengan 'admin' atau 'marketing_test'")
+        password = st.text_input("Password", type="password", help="Password tidak dicek di versi ini.")
+        if st.form_submit_button("Login"):
             user = db.login(username)
             if user:
                 st.session_state.logged_in = True
                 st.session_state.user = {"username": username, **user}
+                st.session_state.selected_activity_id = None # Reset pilihan saat login
                 st.success("Login Berhasil!")
                 st.rerun()
             else:
                 st.error("Username tidak ditemukan.")
 
-# --- Sidebar ---
 def show_sidebar():
     with st.sidebar:
         st.title("Menu Navigasi")
@@ -51,209 +37,196 @@ def show_sidebar():
         st.write(f"Selamat datang, **{user['name']}**!")
         st.write(f"Role: **{user['role'].capitalize()}**")
         st.divider()
-
+        pages = ["Dashboard", "Aktivitas Pemasaran"]
         if user['role'] == 'superadmin':
-            menu = st.radio("Pilih Halaman:", ["Dashboard", "Aktivitas Pemasaran", "Manajemen Pengguna", "Pengaturan"])
-        else:
-            menu = st.radio("Pilih Halaman:", ["Dashboard", "Aktivitas Pemasaran"])
-
+            pages.extend(["Manajemen Pengguna", "Pengaturan"])
+        
+        # Gunakan st.page_link jika pakai Streamlit 1.33+, atau st.button jika tidak
+        if st.button("⬅️ Kembali ke Daftar Aktivitas"):
+            st.session_state.page = "Aktivitas Pemasaran"
+            st.session_state.selected_activity_id = None
+            st.rerun()
+        
         st.divider()
         if st.button("Logout"):
-            st.session_state.logged_in = False
-            st.session_state.user = None
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
             st.rerun()
-    return menu
 
-# --- Halaman Dashboard ---
-def show_dashboard():
+# --- Halaman-Halaman Aplikasi ---
+
+def page_dashboard():
     st.title(f"Dashboard {st.session_state.user['role'].capitalize()}")
     user = st.session_state.user
+    activities = db.get_all_marketing_activities() if user['role'] == 'superadmin' else db.get_marketing_activities_by_username(user['username'])
     
-    if user['role'] == 'superadmin':
-        activities = db.get_all_marketing_activities()
-        users = db.get_all_users()
-    else:
-        activities = db.get_marketing_activities_by_username(user['username'])
-        users = []
-
     if not activities:
         st.info("Belum ada data aktivitas untuk ditampilkan.")
         return
 
-    activities_df = pd.DataFrame(activities)
-    total_activities = len(activities_df)
-    total_prospects = activities_df['prospect_name'].nunique()
-    total_marketing = len([u for u in users if u.get('role') == 'marketing']) if users else 1
-
+    df = pd.DataFrame(activities)
     col1, col2, col3 = st.columns(3)
-    col1.metric("Total Aktivitas", total_activities)
-    col2.metric("Total Prospek Unik", total_prospects)
+    col1.metric("Total Aktivitas", len(df))
+    col2.metric("Total Prospek Unik", df['prospect_name'].nunique())
     if user['role'] == 'superadmin':
-        col3.metric("Jumlah Tim Marketing", total_marketing)
+        col3.metric("Jumlah Tim Marketing", df['marketer_username'].nunique())
 
-    # Visualisasi
     st.subheader("Analisis Aktivitas")
     col1, col2 = st.columns(2)
-
     with col1:
-        status_counts = activities_df['status'].map(STATUS_MAPPING).value_counts()
+        status_counts = df['status'].map(STATUS_MAPPING).value_counts()
         fig = px.pie(status_counts, values=status_counts.values, names=status_counts.index, title="Distribusi Status Prospek")
         st.plotly_chart(fig, use_container_width=True)
-
     with col2:
-        if user['role'] == 'superadmin' and not activities_df.empty:
-            marketer_counts = activities_df['marketer_username'].value_counts()
-            fig2 = px.bar(marketer_counts, x=marketer_counts.index, y=marketer_counts.values, title="Aktivitas per Marketing", labels={'x': 'Marketing', 'y': 'Jumlah Aktivitas'})
+        if not df.empty:
+            type_counts = df['activity_type'].value_counts()
+            fig2 = px.bar(type_counts, x=type_counts.index, y=type_counts.values, title="Distribusi Jenis Aktivitas")
             st.plotly_chart(fig2, use_container_width=True)
-        elif not activities_df.empty:
-             activity_type_counts = activities_df['activity_type'].value_counts()
-             fig2 = px.pie(activity_type_counts, values=activity_type_counts.values, names=activity_type_counts.index, title="Distribusi Jenis Aktivitas")
-             st.plotly_chart(fig2, use_container_width=True)
 
-# --- Halaman Aktivitas Pemasaran ---
-def show_marketing_activities_page():
-    st.title("Manajemen Aktivitas Pemasaran")
+def page_activities_list():
+    st.title("Daftar Aktivitas Pemasaran")
     user = st.session_state.user
+    activities = db.get_all_marketing_activities() if user['role'] == 'superadmin' else db.get_marketing_activities_by_username(user['username'])
 
-    # Pilih aktivitas untuk diedit atau tambah baru
-    activity_to_edit = None
-    if user['role'] == 'superadmin':
-        activities = db.get_all_marketing_activities()
+    if st.button("➕ Tambah Aktivitas Baru"):
+        st.session_state.page = "Form Aktivitas"
+        st.session_state.selected_activity_id = None # Mode Tambah
+        st.rerun()
+
+    if not activities:
+        st.info("Belum ada aktivitas. Silakan tambahkan yang baru.")
+        return
+
+    df = pd.DataFrame(activities)
+    st.write(f"Total: {len(df)} aktivitas")
+    
+    for index, row in df.iterrows():
+        with st.container():
+            col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+            col1.markdown(f"**{row['prospect_name']}**")
+            col1.caption(f"Oleh: {row['marketer_username']} | Lokasi: {row.get('prospect_location', 'N/A')}")
+            col2.info(f"Jenis: {row.get('activity_type', 'N/A')}")
+            col3.warning(f"Status: {STATUS_MAPPING.get(row['status'], 'N/A')}")
+            if col4.button("Lihat Detail / Follow-up", key=f"detail_{row['id']}"):
+                st.session_state.page = "Detail Aktivitas"
+                st.session_state.selected_activity_id = row['id']
+                st.rerun()
+            st.divider()
+
+def page_activity_detail_and_followup():
+    activity_id = st.session_state.selected_activity_id
+    activity = db.get_activity_by_id(activity_id)
+
+    if not activity:
+        st.error("Aktivitas tidak ditemukan. Kembali ke daftar.")
+        st.session_state.page = "Aktivitas Pemasaran"
+        st.session_state.selected_activity_id = None
+        st.rerun()
+        return
+
+    st.title(f"Detail: {activity['prospect_name']}")
+    
+    # Menampilkan detail aktivitas
+    with st.expander("Lihat/Edit Detail Aktivitas", expanded=True):
+        with st.form("edit_activity_form"):
+            # ... (semua field form dari kode lama Anda) ...
+            prospect_name = st.text_input("Nama Prospek", value=activity['prospect_name'])
+            prospect_location = st.text_input("Lokasi", value=activity.get('prospect_location', ''))
+            contact_person = st.text_input("Kontak Person", value=activity.get('contact_person', ''))
+            contact_phone = st.text_input("Telepon", value=activity.get('contact_phone', ''))
+            status_display = st.selectbox("Status", options=list(STATUS_MAPPING.values()), index=list(STATUS_MAPPING.values()).index(STATUS_MAPPING.get(activity['status'], 'baru')))
+            
+            # ... tambahkan field lainnya ...
+            
+            if st.form_submit_button("Simpan Perubahan Aktivitas"):
+                status_key = REVERSE_STATUS_MAPPING[status_display]
+                # Panggil fungsi edit dari db_supabase.py
+                success, msg = db.edit_marketing_activity(activity_id, prospect_name, prospect_location, contact_person, contact_phone, activity.get('contact_email'), activity.get('activity_date'), activity.get('activity_type'), activity.get('description'), status_key)
+                if success:
+                    st.success(msg)
+                    st.rerun()
+                else:
+                    st.error(msg)
+    
+    # Bagian Follow-up
+    st.subheader("Riwayat & Tambah Follow-up")
+    followups = db.get_followups_by_activity_id(activity_id)
+    if followups:
+        for fu in followups:
+            fu_time = datetime.fromisoformat(fu['created_at']).strftime('%d %b %Y, %H:%M')
+            st.info(f"**{fu_time} oleh {fu['marketer_username']}**\n\n{fu['notes']}\n\n*Next Action:* {fu['next_action']}")
     else:
-        activities = db.get_marketing_activities_by_username(user['username'])
+        st.caption("Belum ada follow-up untuk aktivitas ini.")
 
-    ids = ["<< Tambah Aktivitas Baru >>"]
-    if activities:
-        ids.extend([f"{act['id']} - {act['prospect_name']}" for act in activities])
-    
-    selected_id_str = st.selectbox("Pilih aktivitas untuk dilihat/diedit, atau pilih 'Tambah Baru'", ids)
-    
-    if selected_id_str != "<< Tambah Aktivitas Baru >>":
-        selected_id = int(selected_id_str.split(" - ")[0])
-        activity_to_edit = db.get_activity_by_id(selected_id)
-    
-    # Form untuk Tambah / Edit
-    with st.form("activity_form", clear_on_submit=False):
-        st.subheader("Detail Aktivitas" if activity_to_edit else "Form Aktivitas Baru")
+    with st.form("new_followup_form"):
+        notes = st.text_area("Catatan Follow-up Baru:")
+        if st.form_submit_button("Simpan Follow-up"):
+            if not notes:
+                st.warning("Catatan tidak boleh kosong.")
+            else:
+                # Panggil fungsi add_followup dari db_supabase.py
+                # Untuk kesederhanaan, kita hardcode beberapa nilai
+                success, msg = db.add_followup(activity_id, st.session_state.user['username'], notes, "Hubungi lagi", None, "Sedang", activity['status'])
+                if success:
+                    st.success(msg)
+                    st.rerun()
+                else:
+                    st.error(msg)
+                    
+def page_activity_form():
+    st.title("Form Aktivitas Pemasaran Baru")
+    with st.form("new_activity_form"):
+        # ... (semua field untuk form BARU) ...
+        prospect_name = st.text_input("Nama Prospek*")
+        prospect_location = st.text_input("Lokasi")
+        activity_type = st.selectbox("Jenis Aktivitas", ["Presentasi", "Demo Produk", "Follow-up Call", "Email", "Meeting", "Lainnya"])
+        status_display = st.selectbox("Status Awal", options=list(STATUS_MAPPING.values()))
+        description = st.text_area("Deskripsi")
         
-        prospect_name = st.text_input("Nama Prospek", value=activity_to_edit['prospect_name'] if activity_to_edit else "")
-        prospect_location = st.text_input("Lokasi Prospek", value=activity_to_edit['prospect_location'] if activity_to_edit else "")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            contact_person = st.text_input("Nama Kontak", value=activity_to_edit['contact_person'] if activity_to_edit else "")
-            contact_phone = st.text_input("Telepon Kontak", value=activity_to_edit['contact_phone'] if activity_to_edit else "")
-        with col2:
-            contact_email = st.text_input("Email Kontak", value=activity_to_edit['contact_email'] if activity_to_edit else "")
-            default_date = datetime.strptime(activity_to_edit['activity_date'], '%Y-%m-%d') if activity_to_edit and activity_to_edit.get('activity_date') else datetime.today()
-            activity_date = st.date_input("Tanggal Aktivitas", value=default_date)
-
-        activity_type_options = ["Presentasi", "Demo Produk", "Follow-up Call", "Email", "Meeting", "Lainnya"]
-        activity_type = st.selectbox("Jenis Aktivitas", options=activity_type_options, index=activity_type_options.index(activity_to_edit['activity_type']) if activity_to_edit and activity_to_edit.get('activity_type') in activity_type_options else 0)
-        
-        status_display = st.selectbox("Status", options=list(STATUS_MAPPING.values()), index=list(STATUS_MAPPING.values()).index(STATUS_MAPPING.get(activity_to_edit['status'], 'baru')) if activity_to_edit else 0)
-        
-        description = st.text_area("Deskripsi", value=activity_to_edit['description'] if activity_to_edit else "")
-        
-        submitted = st.form_submit_button("Simpan Aktivitas")
-
-        if submitted:
+        if st.form_submit_button("Simpan Aktivitas Baru"):
             if not prospect_name:
                 st.error("Nama Prospek wajib diisi!")
             else:
                 status_key = REVERSE_STATUS_MAPPING[status_display]
-                if activity_to_edit: # Mode Edit
-                    success, message = db.edit_marketing_activity(activity_to_edit['id'], prospect_name, prospect_location, contact_person, contact_phone, contact_email, activity_date, activity_type, description, status_key)
-                else: # Mode Tambah Baru
-                    success, message, new_id = db.add_marketing_activity(user['username'], prospect_name, prospect_location, contact_person, contact_phone, contact_email, activity_date, activity_type, description, status_key)
-                
+                success, msg, new_id = db.add_marketing_activity(
+                    st.session_state.user['username'], prospect_name, prospect_location,
+                    "", "", "", "", datetime.today(), activity_type, description, status_key
+                )
                 if success:
-                    st.success(message)
+                    st.success(msg)
+                    st.session_state.page = "Detail Aktivitas"
+                    st.session_state.selected_activity_id = new_id
                     st.rerun()
                 else:
-                    st.error(message)
+                    st.error(msg)
 
-    # Tombol hapus dan bagian Follow-up
-    if activity_to_edit:
-        # Tombol Hapus (hanya untuk admin)
-        if user['role'] == 'superadmin':
-            if st.button("Hapus Aktivitas Ini", type="primary"):
-                success, message = db.delete_marketing_activity(activity_to_edit['id'])
-                if success:
-                    st.success(message)
-                    st.rerun()
-                else:
-                    st.error(message)
-
-        # Tampilkan Follow-ups
-        st.divider()
-        st.subheader(f"Follow-up untuk {activity_to_edit['prospect_name']}")
-        followups = db.get_followups_by_activity_id(activity_to_edit['id'])
-        if followups:
-            for fu in followups:
-                with st.expander(f"Follow-up pada {datetime.strptime(fu['created_at'], '%Y-%m-%dT%H:%M:%S.%f%z').strftime('%d %b %Y, %H:%M')}"):
-                    st.write(f"**Catatan:** {fu['notes']}")
-                    st.write(f"**Tindak Lanjut:** {fu['next_action']} (Jadwal: {fu.get('next_followup_date', 'N/A')})")
-                    st.write(f"**Tingkat Ketertarikan:** {fu.get('interest_level', 'N/A')}")
-        
-        with st.form("followup_form"):
-            st.write("**Tambah Follow-up Baru**")
-            notes = st.text_area("Catatan")
-            next_action = st.text_input("Tindakan Selanjutnya")
-            next_followup_date = st.date_input("Jadwal Follow-up Berikutnya", value=None)
-            interest_level = st.select_slider("Tingkat Ketertarikan", options=["Rendah", "Sedang", "Tinggi"])
-            
-            # Saat follow-up ditambahkan, status aktivitas utama juga diupdate
-            new_status_display = st.selectbox("Update Status Prospek Menjadi:", options=list(STATUS_MAPPING.values()), index=list(STATUS_MAPPING.values()).index(STATUS_MAPPING[activity_to_edit['status']]))
-            
-            fu_submitted = st.form_submit_button("Simpan Follow-up")
-            if fu_submitted:
-                if not notes:
-                    st.error("Catatan follow-up tidak boleh kosong!")
-                else:
-                    new_status_key = REVERSE_STATUS_MAPPING[new_status_display]
-                    success, message = db.add_followup(activity_to_edit['id'], user['username'], notes, next_action, next_followup_date, interest_level, new_status_key)
-                    if success:
-                        st.success(message)
-                        st.rerun()
-                    else:
-                        st.error(message)
-
-# --- Halaman Pengaturan ---
-def show_settings_page():
-    st.title("Pengaturan Aplikasi")
-    config = db.get_app_config()
-    with st.form("config_form"):
-        app_name = st.text_input("Nama Aplikasi", value=config.get('app_name', ''))
-        submitted = st.form_submit_button("Simpan")
-        if submitted:
-            success, message = db.update_app_config({'app_name': app_name})
-            if success:
-                st.success(message)
-                st.rerun()
-            else:
-                st.error(message)
-
-# --- Logika Utama Aplikasi ---
 def main():
+    # Inisialisasi session state
     if 'logged_in' not in st.session_state:
         st.session_state.logged_in = False
+    if 'page' not in st.session_state:
+        st.session_state.page = "Dashboard"
+    if 'selected_activity_id' not in st.session_state:
+        st.session_state.selected_activity_id = None
 
     if not st.session_state.logged_in:
         show_login_page()
-    else:
-        menu = show_sidebar()
-        if menu == "Dashboard":
-            show_dashboard()
-        elif menu == "Aktivitas Pemasaran":
-            show_marketing_activities_page()
-        elif menu == "Manajemen Pengguna":
-            st.title("Manajemen Pengguna")
-            st.info("Fitur ini dapat dikembangkan lebih lanjut dengan Supabase Auth untuk manajemen pengguna yang sesungguhnya.")
-            users = db.get_all_users()
-            st.dataframe(users)
-        elif menu == "Pengaturan":
-            show_settings_page()
+        return
+
+    show_sidebar()
+    
+    # Navigasi Halaman
+    if st.session_state.page == "Dashboard":
+        page_dashboard()
+    elif st.session_state.page == "Aktivitas Pemasaran":
+        page_activities_list()
+    elif st.session_state.page == "Detail Aktivitas":
+        page_activity_detail_and_followup()
+    elif st.session_state.page == "Form Aktivitas":
+        page_activity_form()
+    # Halaman lain bisa ditambahkan di sini
+    # elif st.session_state.page == "Manajemen Pengguna":
+    #     ...
 
 if __name__ == "__main__":
     main()

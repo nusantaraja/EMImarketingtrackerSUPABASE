@@ -2,11 +2,12 @@
 
 Aplikasi web modern untuk pencatatan dan manajemen aktivitas tim pemasaran internal **EKUITAS MEDIA INVESTAMA (EMI)**. Dibangun untuk efisiensi, kolaborasi, dan analisis data yang *realtime*.
 
-<div align="center">
+<div align="left">
   <img src="https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white" alt="Streamlit"/>
   <img src="https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase"/>
   <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python"/>
 </div>
+
 
 ---
 

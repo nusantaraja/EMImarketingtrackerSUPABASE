@@ -5,27 +5,7 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime
 import db_supabase as db
-import pytz # <-- TAMBAHKAN BARIS INI
-
-def convert_to_wib_and_format(iso_string, format_str='%A, %d %b %Y, %H:%M'):
-    """Mengkonversi string ISO 8601 dari Supabase ke WIB dan memformatnya."""
-    if not iso_string:
-        return "N/A"
-    try:
-        # Buat objek datetime dari string ISO, sudah termasuk info timezone (UTC)
-        dt_utc = datetime.fromisoformat(iso_string)
-        
-        # Tentukan zona waktu WIB
-        wib_tz = pytz.timezone("Asia/Jakarta") # Menggunakan nama timezone resmi
-        
-        # Konversi ke WIB
-        dt_wib = dt_utc.astimezone(wib_tz)
-        
-        # Format menjadi string yang mudah dibaca
-        return dt_wib.strftime(format_str)
-    except (ValueError, TypeError):
-        # Jika format string tidak valid atau None
-        return iso_string
+import pytz
 
 # --- Konfigurasi Halaman & Variabel Global ---
 st.set_page_config(page_title="EMI Marketing Tracker", page_icon="💼", layout="wide")
@@ -33,6 +13,19 @@ st.set_page_config(page_title="EMI Marketing Tracker", page_icon="💼", layout=
 STATUS_MAPPING = {'baru': 'Baru', 'dalam_proses': 'Dalam Proses', 'berhasil': 'Berhasil', 'gagal': 'Gagal'}
 REVERSE_STATUS_MAPPING = {v: k for k, v in STATUS_MAPPING.items()}
 ACTIVITY_TYPES = ["Presentasi", "Demo Produk", "Follow-up Call", "Email", "Meeting", "Lainnya"]
+
+# --- Fungsi Helper untuk Waktu ---
+def convert_to_wib_and_format(iso_string, format_str='%A, %d %b %Y, %H:%M'):
+    """Mengkonversi string ISO 8601 dari Supabase ke WIB dan memformatnya."""
+    if not iso_string:
+        return "N/A"
+    try:
+        dt_utc = datetime.fromisoformat(iso_string)
+        wib_tz = pytz.timezone("Asia/Jakarta")
+        dt_wib = dt_utc.astimezone(wib_tz)
+        return dt_wib.strftime(format_str)
+    except (ValueError, TypeError):
+        return iso_string
 
 # --- Fungsi-fungsi Halaman (Pages) ---
 
@@ -60,19 +53,15 @@ def show_sidebar():
         st.write(f"Selamat datang, **{profile.get('full_name', 'User')}**!")
         st.write(f"Role: **{profile.get('role', 'N/A').capitalize()}**")
         st.divider()
-
         pages = ["Dashboard", "Aktivitas Pemasaran"]
         if profile.get('role') == 'superadmin':
             pages.extend(["Manajemen Pengguna", "Pengaturan"])
-        
         page = st.radio("Pilih Halaman:", pages)
-        
         st.divider()
         if st.button("Logout"):
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.rerun()
-        
         return page
 
 def page_dashboard():
@@ -80,11 +69,7 @@ def page_dashboard():
     user = st.session_state.user
     profile = st.session_state.profile
     
-    # Ambil data aktivitas
-    if profile.get('role') == 'superadmin':
-        activities = db.get_all_marketing_activities()
-    else:
-        activities = db.get_marketing_activities_by_user_id(user.id)
+    activities = db.get_all_marketing_activities() if profile.get('role') == 'superadmin' else db.get_marketing_activities_by_user_id(user.id)
     
     if not activities:
         st.info("Belum ada data aktivitas untuk ditampilkan.")
@@ -92,7 +77,6 @@ def page_dashboard():
 
     df = pd.DataFrame(activities)
     
-    # --- Metrik Utama ---
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Aktivitas", len(df))
     col2.metric("Total Prospek Unik", df['prospect_name'].nunique())
@@ -102,88 +86,26 @@ def page_dashboard():
     st.divider()
     st.subheader("Analisis Aktivitas Pemasaran")
     
-    # --- Baris Grafik Pertama (Status & Jenis Aktivitas) ---
     col1, col2 = st.columns(2)
     with col1:
-        if not df.empty and 'status' in df.columns:
-            status_counts = df['status'].map(STATUS_MAPPING).value_counts()
-            fig = px.pie(status_counts, values=status_counts.values, names=status_counts.index, 
-                         title="Distribusi Status Prospek", color_discrete_sequence=px.colors.sequential.RdBu)
-            st.plotly_chart(fig, use_container_width=True)
-            
+        status_counts = df['status'].map(STATUS_MAPPING).value_counts()
+        fig = px.pie(status_counts, values=status_counts.values, names=status_counts.index, title="Distribusi Status Prospek", color_discrete_sequence=px.colors.sequential.RdBu)
+        st.plotly_chart(fig, use_container_width=True)
     with col2:
-        if not df.empty and 'activity_type' in df.columns:
-            type_counts = df['activity_type'].value_counts()
-            fig2 = px.bar(type_counts, x=type_counts.index, y=type_counts.values, 
-                          title="Distribusi Jenis Aktivitas", labels={'x': 'Jenis Aktivitas', 'y': 'Jumlah'})
-            st.plotly_chart(fig2, use_container_width=True)
+        type_counts = df['activity_type'].value_counts()
+        fig2 = px.bar(type_counts, x=type_counts.index, y=type_counts.values, title="Distribusi Jenis Aktivitas", labels={'x': 'Jenis Aktivitas', 'y': 'Jumlah'})
+        st.plotly_chart(fig2, use_container_width=True)
 
-    # --- [SENTUHAN AKHIR 1] Baris Grafik Kedua (Lokasi & Nama Marketing) ---
-    # Hanya ditampilkan untuk superadmin untuk analisis yang lebih dalam
-    if profile.get('role') == 'superadmin':
-        col3, col4 = st.columns(2)
-        with col3:
-            if not df.empty and 'prospect_location' in df.columns:
-                # Membersihkan dan menghitung 10 lokasi teratas
-                location_counts = df['prospect_location'].str.strip().str.title().value_counts().nlargest(10)
-                fig3 = px.bar(location_counts, x=location_counts.index, y=location_counts.values, 
-                              title="Top 10 Lokasi Prospek", labels={'x': 'Kota/Lokasi', 'y': 'Jumlah Prospek'})
-                st.plotly_chart(fig3, use_container_width=True)
-                
-        with col4:
-            if not df.empty and 'marketer_username' in df.columns:
-                marketer_counts = df['marketer_username'].value_counts()
-                fig4 = px.bar(marketer_counts, x=marketer_counts.index, y=marketer_counts.values, 
-                              title="Aktivitas per Marketing", labels={'x': 'Nama Marketing', 'y': 'Jumlah Aktivitas'},
-                              color=marketer_counts.values, color_continuous_scale=px.colors.sequential.Viridis)
-                st.plotly_chart(fig4, use_container_width=True)
-
+    # --- [PERCANTIK 1] MENAMBAHKAN TABEL AKTIVITAS TERBARU ---
     st.divider()
-    
-    # --- [SENTUHAN AKHIR 2] Tabel Follow-up Mendatang (5 Hari ke Depan) ---
-    st.subheader("Jadwal Follow-up (5 Hari Mendatang)")
-
-    # Mengambil semua data follow-up dari semua aktivitas yang ada
-    # Ini kurang efisien untuk data besar, tapi sangat efektif untuk dashboard
-    all_followups = [fu for act in activities for fu in db.get_followups_by_activity_id(act['id'])]
-    
-    # Menambahkan nama prospek ke setiap data follow-up untuk ditampilkan di tabel
-    for fu in all_followups:
-        fu['prospect_name'] = next((act['prospect_name'] for act in activities if act['id'] == fu['activity_id']), 'N/A')
-
-    if not all_followups:
-        st.info("Tidak ada data follow-up yang ditemukan.")
-    else:
-        followups_df = pd.DataFrame(all_followups)
-        
-        # Konversi kolom tanggal menjadi tipe datetime untuk perbandingan
-        followups_df['next_followup_date'] = pd.to_datetime(followups_df['next_followup_date'], errors='coerce')
-        
-        # Tentukan rentang waktu: hari ini sampai 5 hari ke depan
-        today = pd.Timestamp.now().normalize()
-        next_5_days = today + pd.Timedelta(days=5)
-        
-        # Filter dataframe untuk menampilkan hanya yang akan datang
-        upcoming_followups_df = followups_df[
-            (followups_df['next_followup_date'] >= today) &
-            (followups_df['next_followup_date'] <= next_5_days)
-        ].sort_values(by='next_followup_date')
-
-        if upcoming_followups_df.empty:
-            st.info("Tidak ada jadwal follow-up dalam 5 hari ke depan.")
-        else:
-            # Pilih dan ganti nama kolom untuk tampilan yang lebih rapi
-            display_cols = ['next_followup_date', 'prospect_name', 'marketer_username', 'next_action']
-            upcoming_followups_df = upcoming_followups_df[display_cols].rename(columns={
-                'next_followup_date': 'Tanggal Follow-up',
-                'prospect_name': 'Nama Prospek',
-                'marketer_username': 'Marketing',
-                'next_action': 'Tindakan Selanjutnya'
-            })
-            # Format tanggal agar lebih mudah dibaca oleh manusia
-            upcoming_followups_df['Tanggal Follow-up'] = upcoming_followups_df['Tanggal Follow-up'].dt.strftime('%A, %d %B %Y')
-            
-            st.dataframe(upcoming_followups_df, use_container_width=True, hide_index=True)
+    st.subheader("Aktivitas Terbaru")
+    latest_activities = df.head(5)
+    display_cols = ['activity_date', 'prospect_name', 'marketer_username', 'status']
+    latest_activities_display = latest_activities[display_cols].rename(columns={
+        'activity_date': 'Tanggal', 'prospect_name': 'Prospek', 'marketer_username': 'Marketing', 'status': 'Status'
+    })
+    latest_activities_display['Status'] = latest_activities_display['Status'].map(STATUS_MAPPING)
+    st.dataframe(latest_activities_display, use_container_width=True, hide_index=True)
 
 def page_activities_management():
     st.title("Manajemen Aktivitas Pemasaran")
@@ -191,14 +113,58 @@ def page_activities_management():
 
     activities = db.get_all_marketing_activities() if profile.get('role') == 'superadmin' else db.get_marketing_activities_by_user_id(st.session_state.user.id)
     
-    options = {act['id']: f"{act['prospect_name']} (Status: {STATUS_MAPPING.get(act['status'], 'N/A')})" for act in activities}
-    options[0] = "<< Tambah Aktivitas Baru >>"
+    if not activities:
+        st.info("Belum ada data aktivitas. Silakan tambahkan aktivitas baru di bawah.")
+        df = pd.DataFrame()
+    else:
+        df = pd.DataFrame(activities)
+
+    # --- [PERCANTIK 2] TABEL AKTIVITAS DENGAN PAGINASI ---
+    st.subheader("Semua Catatan Aktivitas")
+
+    if 'page_num' not in st.session_state:
+        st.session_state.page_num = 1
     
-    selected_id = st.selectbox("Pilih aktivitas untuk dilihat/diedit, atau pilih 'Tambah Baru'", 
-                               options.keys(), format_func=lambda x: options[x])
+    items_per_page = 30
+    total_items = len(df)
+    total_pages = max(1, (total_items // items_per_page) + (1 if total_items % items_per_page > 0 else 0))
+
+    col_nav1, col_nav2, col_nav3 = st.columns([1, 8, 1])
+    with col_nav1:
+        if st.button("⬅️ Halaman Sebelumnya", disabled=(st.session_state.page_num <= 1), use_container_width=True):
+            st.session_state.page_num -= 1
+            st.rerun()
+    with col_nav3:
+        if st.button("Halaman Berikutnya ➡️", disabled=(st.session_state.page_num >= total_pages), use_container_width=True):
+            st.session_state.page_num += 1
+            st.rerun()
+    with col_nav2:
+        st.write(f"<div style='text-align: center; margin-top: 10px;'>Halaman <b>{st.session_state.page_num}</b> dari <b>{total_pages}</b></div>", unsafe_allow_html=True)
+
+    start_idx = (st.session_state.page_num - 1) * items_per_page
+    end_idx = start_idx + items_per_page
+    paginated_df = df.iloc[start_idx:end_idx]
+
+    if not paginated_df.empty:
+        display_cols = ['activity_date', 'prospect_name', 'prospect_location', 'marketer_username', 'activity_type', 'status']
+        paginated_df_display = paginated_df[display_cols].rename(columns={
+            'activity_date': 'Tanggal', 'prospect_name': 'Prospek', 'prospect_location': 'Lokasi',
+            'marketer_username': 'Marketing', 'activity_type': 'Jenis', 'status': 'Status'
+        })
+        paginated_df_display['Status'] = paginated_df_display['Status'].map(STATUS_MAPPING)
+        st.dataframe(paginated_df_display, use_container_width=True, hide_index=True)
+    
     st.divider()
 
+    # --- Bagian untuk Detail, Edit, dan Follow-up ---
+    options = {act['id']: f"ID: {act['id']} - {act['prospect_name']}" for act in activities}
+    options[0] = "<< Pilih ID untuk Detail / Edit / Follow-up >>"
+    
+    selected_id = st.selectbox("Pilih aktivitas untuk melihat detail:", 
+                               options.keys(), format_func=lambda x: options[x], index=0)
+
     if selected_id == 0:
+        st.subheader("Form Tambah Aktivitas Baru")
         show_activity_form(None)
     else:
         activity = db.get_activity_by_id(selected_id)
@@ -240,7 +206,6 @@ def show_activity_form(activity):
                 if activity:
                     success, msg = db.edit_marketing_activity(activity['id'], prospect_name, prospect_location, contact_person, contact_position, contact_phone, contact_email, activity_date, activity_type, description, status_key)
                 else:
-                    # INI ADALAH BARIS YANG DIPERBAIKI
                     success, msg, new_id = db.add_marketing_activity(user.id, profile.get('full_name', 'N/A'), prospect_name, prospect_location, contact_person, contact_position, contact_phone, contact_email, activity_date, activity_type, description, status_key)
                 
                 if success: 
@@ -258,31 +223,20 @@ def show_activity_form(activity):
             else: 
                 st.error(msg)
 
-# Di dalam file app_supabase.py, ganti seluruh fungsi show_followup_section() dengan ini:
-
 def show_followup_section(activity):
-    """Menampilkan riwayat follow-up dan form untuk menambah follow-up baru."""
     st.divider()
     st.subheader(f"Riwayat & Tambah Follow-up untuk {activity['prospect_name']}")
 
-    # Mengambil dan menampilkan follow-up yang sudah ada
     followups = db.get_followups_by_activity_id(activity['id'])
     if followups:
         for fu in followups:
-            # --- LOGIKA YANG DIPERBAIKI ---
-            fu_time_display = fu.get('created_at', 'Waktu tidak tersedia') # Nilai default
-            fu_time_str = fu.get('created_at')
-            
-            # Coba konversi ke format yang lebih bagus jika memungkinkan
-            if fu_time_str:
+            fu_time_display = fu.get('created_at', 'Waktu tidak tersedia')
+            if fu.get('created_at'):
                 try:
-                    fu_time_display = convert_to_wib_and_format(fu_time_str)
+                    fu_time_display = convert_to_wib_and_format(fu['created_at'])
                 except Exception:
-                    # Jika gagal, biarkan apa adanya (nilai dari database)
                     pass 
-            # -----------------------------
             
-            # Menggunakan st.container agar setiap follow-up terpisah rapi
             with st.container(border=True):
                 st.markdown(f"**{fu_time_display} WIB oleh {fu['marketer_username']}**")
                 st.markdown(f"**Catatan:** {fu['notes']}")
@@ -290,38 +244,21 @@ def show_followup_section(activity):
     else:
         st.caption("Belum ada follow-up untuk aktivitas ini.")
 
-    # Form untuk menambah follow-up baru
     with st.form("new_followup_form"):
         st.write("**Tambah Follow-up Baru**")
         notes = st.text_area("Catatan Follow-up Baru:")
         next_action = st.text_input("Rencana Tindak Lanjut Berikutnya")
         next_followup_date = st.date_input("Jadwal Follow-up Berikutnya", value=None, help="Kosongkan jika tidak ada jadwal.")
         interest_level = st.select_slider("Tingkat Ketertarikan Prospek", options=["Rendah", "Sedang", "Tinggi"])
-        
-        # Opsi untuk mengupdate status aktivitas induk saat follow-up ditambahkan
         current_status = STATUS_MAPPING.get(activity['status'], 'Baru')
-        new_status_display = st.selectbox(
-            "Update Status Prospek Menjadi:", 
-            options=list(STATUS_MAPPING.values()), 
-            index=list(STATUS_MAPPING.values()).index(current_status)
-        )
+        new_status_display = st.selectbox("Update Status Prospek Menjadi:", options=list(STATUS_MAPPING.values()), index=list(STATUS_MAPPING.values()).index(current_status))
 
         if st.form_submit_button("Simpan Follow-up"):
             if not notes: 
                 st.warning("Catatan tidak boleh kosong.")
             else:
                 new_status_key = REVERSE_STATUS_MAPPING[new_status_display]
-                # Memanggil fungsi add_followup dari db_supabase
-                success, msg = db.add_followup(
-                    activity['id'], 
-                    st.session_state.user.id, 
-                    st.session_state.profile.get('full_name', 'N/A'), 
-                    notes, 
-                    next_action, 
-                    next_followup_date, 
-                    interest_level, 
-                    new_status_key
-                )
+                success, msg = db.add_followup(activity['id'], st.session_state.user.id, st.session_state.profile.get('full_name', 'N/A'), notes, next_action, next_followup_date, interest_level, new_status_key)
                 if success: 
                     st.success(msg)
                     st.rerun()
@@ -368,14 +305,23 @@ def page_settings():
         submitted = st.form_submit_button("Simpan Pengaturan")
         if submitted:
             success, msg = db.update_app_config({'app_name': app_name})
-            if success: st.success(msg); st.rerun()
-            else: st.error(msg)
+            if success: 
+                st.success(msg)
+                st.rerun()
+            else: 
+                st.error(msg)
 
 # --- Logika Utama Aplikasi ---
 def main():
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False
     
+    if "user" not in st.session_state:
+        st.session_state.user = None
+        
+    if "profile" not in st.session_state:
+        st.session_state.profile = None
+
     if not st.session_state.logged_in:
         show_login_page()
     else:

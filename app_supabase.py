@@ -107,7 +107,82 @@ def page_dashboard():
     latest_activities_display['Status'] = latest_activities_display['Status'].map(STATUS_MAPPING)
     st.dataframe(latest_activities_display, use_container_width=True, hide_index=True)
 
-Style: Improve pagination UI on activities page
+def page_activities_management():
+    st.title("Manajemen Aktivitas Pemasaran")
+    profile = st.session_state.profile
+
+    activities = db.get_all_marketing_activities() if profile.get('role') == 'superadmin' else db.get_marketing_activities_by_user_id(st.session_state.user.id)
+    
+    if not activities:
+        st.info("Belum ada data aktivitas. Silakan tambahkan aktivitas baru di bawah.")
+        df = pd.DataFrame()
+    else:
+        df = pd.DataFrame(activities)
+
+    st.subheader("Semua Catatan Aktivitas")
+
+    # Inisialisasi state untuk paginasi
+    if 'page_num' not in st.session_state:
+        st.session_state.page_num = 1
+    
+    items_per_page = 30
+    total_items = len(df)
+    total_pages = max(1, (total_items // items_per_page) + (1 if total_items % items_per_page > 0 else 0))
+
+    # Potong dataframe sesuai halaman
+    start_idx = (st.session_state.page_num - 1) * items_per_page
+    end_idx = start_idx + items_per_page
+    paginated_df = df.iloc[start_idx:end_idx]
+
+    # Menampilkan tabel data yang sudah dipaginasi
+    if not paginated_df.empty:
+        display_cols = ['activity_date', 'prospect_name', 'prospect_location', 'marketer_username', 'activity_type', 'status']
+        paginated_df_display = paginated_df[display_cols].rename(columns={
+            'activity_date': 'Tanggal', 'prospect_name': 'Prospek', 'prospect_location': 'Lokasi',
+            'marketer_username': 'Marketing', 'activity_type': 'Jenis', 'status': 'Status'
+        })
+        paginated_df_display['Status'] = paginated_df_display['Status'].map(STATUS_MAPPING)
+        st.dataframe(paginated_df_display, use_container_width=True, hide_index=True)
+    
+    # --- [PERCANTIK FINAL] KONTROL PAGINASI DI BAWAH TABEL ---
+    st.divider() # Tambahkan garis pemisah agar rapi
+    
+    # Menggunakan kolom untuk menata tombol dan teks
+    col_nav1, col_nav2, col_nav3 = st.columns([3, 2, 3])
+    
+    with col_nav1:
+        # Tombol PREVIOUS di sebelah kiri, tanpa use_container_width
+        if st.button("⬅️ PREVIOUS", disabled=(st.session_state.page_num <= 1)):
+            st.session_state.page_num -= 1
+            st.rerun()
+    
+    with col_nav2:
+        # Teks "Halaman X dari Y" di tengah
+        st.write(f"<div style='text-align: center; margin-top: 5px;'>Halaman <b>{st.session_state.page_num}</b> dari <b>{total_pages}</b></div>", unsafe_allow_html=True)
+
+    with col_nav3:
+        # Tombol NEXT di sebelah kanan, tanpa use_container_width
+        if st.button("NEXT ➡️", disabled=(st.session_state.page_num >= total_pages)):
+            st.session_state.page_num += 1
+            st.rerun()
+    
+    st.divider()
+
+    # --- Bagian untuk Detail, Edit, dan Follow-up ---
+    options = {act['id']: f"ID: {act['id']} - {act['prospect_name']}" for act in activities}
+    options[0] = "<< Pilih ID untuk Detail / Edit / Follow-up >>"
+    
+    selected_id = st.selectbox("Pilih aktivitas untuk melihat detail:", 
+                               options.keys(), format_func=lambda x: options[x], index=0)
+
+    if selected_id == 0:
+        st.subheader("Form Tambah Aktivitas Baru")
+        show_activity_form(None)
+    else:
+        activity = db.get_activity_by_id(selected_id)
+        if activity:
+            show_activity_form(activity)
+            show_followup_section(activity)
 
 def show_activity_form(activity):
     profile = st.session_state.profile

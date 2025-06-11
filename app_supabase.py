@@ -258,40 +258,70 @@ def show_activity_form(activity):
             else: 
                 st.error(msg)
 
+# Di dalam file app_supabase.py, ganti seluruh fungsi show_followup_section() dengan ini:
+
 def show_followup_section(activity):
+    """Menampilkan riwayat follow-up dan form untuk menambah follow-up baru."""
     st.divider()
     st.subheader(f"Riwayat & Tambah Follow-up untuk {activity['prospect_name']}")
 
+    # Mengambil dan menampilkan follow-up yang sudah ada
     followups = db.get_followups_by_activity_id(activity['id'])
     if followups:
         for fu in followups:
-            fu_time_str = fu['created_at']
-            try:
-                fu_time_wib = convert_to_wib_and_format(fu['created_at']) # <--- BARIS INI DIPERBAIKI
-            except ValueError:
-                fu_time_display = fu_time_str
-
+            # --- LOGIKA YANG DIPERBAIKI ---
+            fu_time_display = fu.get('created_at', 'Waktu tidak tersedia') # Nilai default
+            fu_time_str = fu.get('created_at')
+            
+            # Coba konversi ke format yang lebih bagus jika memungkinkan
+            if fu_time_str:
+                try:
+                    fu_time_display = convert_to_wib_and_format(fu_time_str)
+                except Exception:
+                    # Jika gagal, biarkan apa adanya (nilai dari database)
+                    pass 
+            # -----------------------------
+            
+            # Menggunakan st.container agar setiap follow-up terpisah rapi
             with st.container(border=True):
-                st.markdown(f"**{fu_time_display} oleh {fu['marketer_username']}**")
+                st.markdown(f"**{fu_time_display} WIB oleh {fu['marketer_username']}**")
                 st.markdown(f"**Catatan:** {fu['notes']}")
                 st.caption(f"Tindak Lanjut: {fu.get('next_action', 'N/A')} | Jadwal: {fu.get('next_followup_date', 'N/A')} | Minat: {fu.get('interest_level', 'N/A')}")
     else:
         st.caption("Belum ada follow-up untuk aktivitas ini.")
 
+    # Form untuk menambah follow-up baru
     with st.form("new_followup_form"):
         st.write("**Tambah Follow-up Baru**")
         notes = st.text_area("Catatan Follow-up Baru:")
         next_action = st.text_input("Rencana Tindak Lanjut Berikutnya")
-        next_followup_date = st.date_input("Jadwal Follow-up Berikutnya", value=None)
+        next_followup_date = st.date_input("Jadwal Follow-up Berikutnya", value=None, help="Kosongkan jika tidak ada jadwal.")
         interest_level = st.select_slider("Tingkat Ketertarikan Prospek", options=["Rendah", "Sedang", "Tinggi"])
-        new_status_display = st.selectbox("Update Status Prospek Menjadi:", options=list(STATUS_MAPPING.values()), index=list(STATUS_MAPPING.values()).index(STATUS_MAPPING.get(activity['status'], 'baru')))
+        
+        # Opsi untuk mengupdate status aktivitas induk saat follow-up ditambahkan
+        current_status = STATUS_MAPPING.get(activity['status'], 'Baru')
+        new_status_display = st.selectbox(
+            "Update Status Prospek Menjadi:", 
+            options=list(STATUS_MAPPING.values()), 
+            index=list(STATUS_MAPPING.values()).index(current_status)
+        )
 
         if st.form_submit_button("Simpan Follow-up"):
             if not notes: 
                 st.warning("Catatan tidak boleh kosong.")
             else:
                 new_status_key = REVERSE_STATUS_MAPPING[new_status_display]
-                success, msg = db.add_followup(activity['id'], st.session_state.user.id, st.session_state.profile.get('full_name', 'N/A'), notes, next_action, next_followup_date, interest_level, new_status_key)
+                # Memanggil fungsi add_followup dari db_supabase
+                success, msg = db.add_followup(
+                    activity['id'], 
+                    st.session_state.user.id, 
+                    st.session_state.profile.get('full_name', 'N/A'), 
+                    notes, 
+                    next_action, 
+                    next_followup_date, 
+                    interest_level, 
+                    new_status_key
+                )
                 if success: 
                     st.success(msg)
                     st.rerun()

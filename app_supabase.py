@@ -5,6 +5,27 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime
 import db_supabase as db
+import pytz # <-- TAMBAHKAN BARIS INI
+
+def convert_to_wib_and_format(iso_string, format_str='%A, %d %b %Y, %H:%M'):
+    """Mengkonversi string ISO 8601 dari Supabase ke WIB dan memformatnya."""
+    if not iso_string:
+        return "N/A"
+    try:
+        # Buat objek datetime dari string ISO, sudah termasuk info timezone (UTC)
+        dt_utc = datetime.fromisoformat(iso_string)
+        
+        # Tentukan zona waktu WIB
+        wib_tz = pytz.timezone("Asia/Jakarta") # Menggunakan nama timezone resmi
+        
+        # Konversi ke WIB
+        dt_wib = dt_utc.astimezone(wib_tz)
+        
+        # Format menjadi string yang mudah dibaca
+        return dt_wib.strftime(format_str)
+    except (ValueError, TypeError):
+        # Jika format string tidak valid atau None
+        return iso_string
 
 # --- Konfigurasi Halaman & Variabel Global ---
 st.set_page_config(page_title="EMI Marketing Tracker", page_icon="💼", layout="wide")
@@ -246,7 +267,7 @@ def show_followup_section(activity):
         for fu in followups:
             fu_time_str = fu['created_at']
             try:
-                fu_time_display = datetime.fromisoformat(fu_time_str).strftime('%d %b %Y, %H:%M')
+                fu_time_wib = convert_to_wib_and_format(fu['created_at']) # <--- BARIS INI DIPERBAIKI
             except ValueError:
                 fu_time_display = fu_time_str
 

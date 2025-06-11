@@ -103,13 +103,11 @@ def page_dashboard():
                           title="Distribusi Jenis Aktivitas", labels={'x': 'Jenis Aktivitas', 'y': 'Jumlah'})
             st.plotly_chart(fig2, use_container_width=True)
 
-    # --- [DIKEMBALIKAN] Baris Grafik Kedua (Lokasi & Nama Marketing) ---
-    # Hanya ditampilkan untuk superadmin untuk analisis yang lebih dalam
+    # --- Baris Grafik Kedua (Lokasi & Nama Marketing) ---
     if profile.get('role') == 'superadmin':
         col3, col4 = st.columns(2)
         with col3:
             if not df.empty and 'prospect_location' in df.columns:
-                # Membersihkan dan menghitung 10 lokasi teratas
                 location_counts = df['prospect_location'].str.strip().str.title().value_counts().nlargest(10)
                 fig3 = px.bar(location_counts, x=location_counts.index, y=location_counts.values, 
                               title="Top 10 Lokasi Prospek", labels={'x': 'Kota/Lokasi', 'y': 'Jumlah Prospek'})
@@ -123,16 +121,56 @@ def page_dashboard():
                               color=marketer_counts.values, color_continuous_scale=px.colors.sequential.Viridis)
                 st.plotly_chart(fig4, use_container_width=True)
     
-    # --- [TETAP ADA] Tabel Aktivitas Terbaru ---
+    # --- Tabel Aktivitas Terbaru ---
     st.divider()
     st.subheader("Aktivitas Terbaru")
-    latest_activities = df.head(5)
-    display_cols = ['activity_date', 'prospect_name', 'marketer_username', 'status']
+    latest_activities = df.head(5).copy() # Gunakan .copy() untuk menghindari SettingWithCopyWarning
+    
+    # --- [PERBAIKAN WAKTU WIB] ---
+    # Konversi kolom 'created_at' ke WIB sebelum ditampilkan
+    latest_activities['Waktu Dibuat'] = latest_activities['created_at'].apply(
+        lambda x: convert_to_wib_and_format(x, format_str='%d %b %Y, %H:%M')
+    )
+    
+    display_cols = ['Waktu Dibuat', 'prospect_name', 'marketer_username', 'status']
     latest_activities_display = latest_activities[display_cols].rename(columns={
-        'activity_date': 'Tanggal', 'prospect_name': 'Prospek', 'marketer_username': 'Marketing', 'status': 'Status'
+        'prospect_name': 'Prospek', 'marketer_username': 'Marketing', 'status': 'Status'
     })
     latest_activities_display['Status'] = latest_activities_display['Status'].map(STATUS_MAPPING)
     st.dataframe(latest_activities_display, use_container_width=True, hide_index=True)
+
+    # --- Tabel Jadwal Follow-up Mendatang ---
+    st.divider()
+    st.subheader("Jadwal Follow-up (7 Hari Mendatang)")
+    all_followups = [fu for act in activities for fu in db.get_followups_by_activity_id(act['id'])]
+    
+    if not all_followups:
+        st.info("Tidak ada jadwal follow-up yang ditemukan.")
+    else:
+        for fu in all_followups:
+            fu['prospect_name'] = next((act['prospect_name'] for act in activities if act['id'] == fu['activity_id']), 'N/A')
+        
+        followups_df = pd.DataFrame(all_followups)
+        followups_df['next_followup_date'] = pd.to_datetime(followups_df['next_followup_date'], errors='coerce')
+        
+        today = pd.Timestamp.now(tz='Asia/Jakarta').normalize()
+        next_7_days = today + pd.Timedelta(days=7)
+        
+        upcoming_df = followups_df[
+            (followups_df['next_followup_date'] >= today) & 
+            (followups_df['next_followup_date'] <= next_7_days)
+        ].sort_values(by='next_followup_date')
+
+        if upcoming_df.empty:
+            st.info("Tidak ada jadwal follow-up dalam 7 hari ke depan.")
+        else:
+            display_cols_fu = ['next_followup_date', 'prospect_name', 'marketer_username', 'next_action']
+            upcoming_display_df = upcoming_df[display_cols_fu].rename(columns={
+                'next_followup_date': 'Tanggal', 'prospect_name': 'Prospek', 
+                'marketer_username': 'Marketing', 'next_action': 'Tindakan'
+            })
+            upcoming_display_df['Tanggal'] = upcoming_display_df['Tanggal'].dt.strftime('%A, %d %b %Y')
+            st.dataframe(upcoming_display_df, use_container_width=True, hide_index=True)
 
 def page_activities_management():
     st.title("Manajemen Aktivitas Pemasaran")

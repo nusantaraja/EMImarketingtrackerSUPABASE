@@ -59,7 +59,11 @@ def page_dashboard():
     user = st.session_state.user
     profile = st.session_state.profile
     
-    activities = db.get_all_marketing_activities() if profile.get('role') == 'superadmin' else db.get_marketing_activities_by_user_id(user.id)
+    # Ambil data aktivitas
+    if profile.get('role') == 'superadmin':
+        activities = db.get_all_marketing_activities()
+    else:
+        activities = db.get_marketing_activities_by_user_id(user.id)
     
     if not activities:
         st.info("Belum ada data aktivitas untuk ditampilkan.")
@@ -67,6 +71,7 @@ def page_dashboard():
 
     df = pd.DataFrame(activities)
     
+    # --- Metrik Utama ---
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Aktivitas", len(df))
     col2.metric("Total Prospek Unik", df['prospect_name'].nunique())
@@ -76,17 +81,88 @@ def page_dashboard():
     st.divider()
     st.subheader("Analisis Aktivitas Pemasaran")
     
+    # --- Baris Grafik Pertama (Status & Jenis Aktivitas) ---
     col1, col2 = st.columns(2)
     with col1:
-        status_counts = df['status'].map(STATUS_MAPPING).value_counts()
-        fig = px.pie(status_counts, values=status_counts.values, names=status_counts.index, 
-                     title="Distribusi Status Prospek", color_discrete_sequence=px.colors.sequential.RdBu)
-        st.plotly_chart(fig, use_container_width=True)
+        if not df.empty and 'status' in df.columns:
+            status_counts = df['status'].map(STATUS_MAPPING).value_counts()
+            fig = px.pie(status_counts, values=status_counts.values, names=status_counts.index, 
+                         title="Distribusi Status Prospek", color_discrete_sequence=px.colors.sequential.RdBu)
+            st.plotly_chart(fig, use_container_width=True)
+            
     with col2:
-        type_counts = df['activity_type'].value_counts()
-        fig2 = px.bar(type_counts, x=type_counts.index, y=type_counts.values, 
-                      title="Distribusi Jenis Aktivitas", labels={'x': 'Jenis Aktivitas', 'y': 'Jumlah'})
-        st.plotly_chart(fig2, use_container_width=True)
+        if not df.empty and 'activity_type' in df.columns:
+            type_counts = df['activity_type'].value_counts()
+            fig2 = px.bar(type_counts, x=type_counts.index, y=type_counts.values, 
+                          title="Distribusi Jenis Aktivitas", labels={'x': 'Jenis Aktivitas', 'y': 'Jumlah'})
+            st.plotly_chart(fig2, use_container_width=True)
+
+    # --- [SENTUHAN AKHIR 1] Baris Grafik Kedua (Lokasi & Nama Marketing) ---
+    # Hanya ditampilkan untuk superadmin untuk analisis yang lebih dalam
+    if profile.get('role') == 'superadmin':
+        col3, col4 = st.columns(2)
+        with col3:
+            if not df.empty and 'prospect_location' in df.columns:
+                # Membersihkan dan menghitung 10 lokasi teratas
+                location_counts = df['prospect_location'].str.strip().str.title().value_counts().nlargest(10)
+                fig3 = px.bar(location_counts, x=location_counts.index, y=location_counts.values, 
+                              title="Top 10 Lokasi Prospek", labels={'x': 'Kota/Lokasi', 'y': 'Jumlah Prospek'})
+                st.plotly_chart(fig3, use_container_width=True)
+                
+        with col4:
+            if not df.empty and 'marketer_username' in df.columns:
+                marketer_counts = df['marketer_username'].value_counts()
+                fig4 = px.bar(marketer_counts, x=marketer_counts.index, y=marketer_counts.values, 
+                              title="Aktivitas per Marketing", labels={'x': 'Nama Marketing', 'y': 'Jumlah Aktivitas'},
+                              color=marketer_counts.values, color_continuous_scale=px.colors.sequential.Viridis)
+                st.plotly_chart(fig4, use_container_width=True)
+
+    st.divider()
+    
+    # --- [SENTUHAN AKHIR 2] Tabel Follow-up Mendatang (5 Hari ke Depan) ---
+    st.subheader("Jadwal Follow-up (5 Hari Mendatang)")
+
+    # Mengambil semua data follow-up dari semua aktivitas yang ada
+    # Ini kurang efisien untuk data besar, tapi sangat efektif untuk dashboard
+    all_followups = [fu for act in activities for fu in db.get_followups_by_activity_id(act['id'])]
+    
+    # Menambahkan nama prospek ke setiap data follow-up untuk ditampilkan di tabel
+    for fu in all_followups:
+        fu['prospect_name'] = next((act['prospect_name'] for act in activities if act['id'] == fu['activity_id']), 'N/A')
+
+    if not all_followups:
+        st.info("Tidak ada data follow-up yang ditemukan.")
+    else:
+        followups_df = pd.DataFrame(all_followups)
+        
+        # Konversi kolom tanggal menjadi tipe datetime untuk perbandingan
+        followups_df['next_followup_date'] = pd.to_datetime(followups_df['next_followup_date'], errors='coerce')
+        
+        # Tentukan rentang waktu: hari ini sampai 5 hari ke depan
+        today = pd.Timestamp.now().normalize()
+        next_5_days = today + pd.Timedelta(days=5)
+        
+        # Filter dataframe untuk menampilkan hanya yang akan datang
+        upcoming_followups_df = followups_df[
+            (followups_df['next_followup_date'] >= today) &
+            (followups_df['next_followup_date'] <= next_5_days)
+        ].sort_values(by='next_followup_date')
+
+        if upcoming_followups_df.empty:
+            st.info("Tidak ada jadwal follow-up dalam 5 hari ke depan.")
+        else:
+            # Pilih dan ganti nama kolom untuk tampilan yang lebih rapi
+            display_cols = ['next_followup_date', 'prospect_name', 'marketer_username', 'next_action']
+            upcoming_followups_df = upcoming_followups_df[display_cols].rename(columns={
+                'next_followup_date': 'Tanggal Follow-up',
+                'prospect_name': 'Nama Prospek',
+                'marketer_username': 'Marketing',
+                'next_action': 'Tindakan Selanjutnya'
+            })
+            # Format tanggal agar lebih mudah dibaca oleh manusia
+            upcoming_followups_df['Tanggal Follow-up'] = upcoming_followups_df['Tanggal Follow-up'].dt.strftime('%A, %d %B %Y')
+            
+            st.dataframe(upcoming_followups_df, use_container_width=True, hide_index=True)
 
 def page_activities_management():
     st.title("Manajemen Aktivitas Pemasaran")

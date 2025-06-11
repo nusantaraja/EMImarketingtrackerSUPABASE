@@ -77,6 +77,7 @@ def page_dashboard():
 
     df = pd.DataFrame(activities)
     
+    # --- Metrik Utama ---
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Aktivitas", len(df))
     col2.metric("Total Prospek Unik", df['prospect_name'].nunique())
@@ -86,17 +87,43 @@ def page_dashboard():
     st.divider()
     st.subheader("Analisis Aktivitas Pemasaran")
     
+    # --- Baris Grafik Pertama (Status & Jenis Aktivitas) ---
     col1, col2 = st.columns(2)
     with col1:
-        status_counts = df['status'].map(STATUS_MAPPING).value_counts()
-        fig = px.pie(status_counts, values=status_counts.values, names=status_counts.index, title="Distribusi Status Prospek", color_discrete_sequence=px.colors.sequential.RdBu)
-        st.plotly_chart(fig, use_container_width=True)
+        if not df.empty and 'status' in df.columns:
+            status_counts = df['status'].map(STATUS_MAPPING).value_counts()
+            fig = px.pie(status_counts, values=status_counts.values, names=status_counts.index, 
+                         title="Distribusi Status Prospek", color_discrete_sequence=px.colors.sequential.RdBu)
+            st.plotly_chart(fig, use_container_width=True)
+            
     with col2:
-        type_counts = df['activity_type'].value_counts()
-        fig2 = px.bar(type_counts, x=type_counts.index, y=type_counts.values, title="Distribusi Jenis Aktivitas", labels={'x': 'Jenis Aktivitas', 'y': 'Jumlah'})
-        st.plotly_chart(fig2, use_container_width=True)
+        if not df.empty and 'activity_type' in df.columns:
+            type_counts = df['activity_type'].value_counts()
+            fig2 = px.bar(type_counts, x=type_counts.index, y=type_counts.values, 
+                          title="Distribusi Jenis Aktivitas", labels={'x': 'Jenis Aktivitas', 'y': 'Jumlah'})
+            st.plotly_chart(fig2, use_container_width=True)
 
-    # --- [PERCANTIK 1] MENAMBAHKAN TABEL AKTIVITAS TERBARU ---
+    # --- [DIKEMBALIKAN] Baris Grafik Kedua (Lokasi & Nama Marketing) ---
+    # Hanya ditampilkan untuk superadmin untuk analisis yang lebih dalam
+    if profile.get('role') == 'superadmin':
+        col3, col4 = st.columns(2)
+        with col3:
+            if not df.empty and 'prospect_location' in df.columns:
+                # Membersihkan dan menghitung 10 lokasi teratas
+                location_counts = df['prospect_location'].str.strip().str.title().value_counts().nlargest(10)
+                fig3 = px.bar(location_counts, x=location_counts.index, y=location_counts.values, 
+                              title="Top 10 Lokasi Prospek", labels={'x': 'Kota/Lokasi', 'y': 'Jumlah Prospek'})
+                st.plotly_chart(fig3, use_container_width=True)
+                
+        with col4:
+            if not df.empty and 'marketer_username' in df.columns:
+                marketer_counts = df['marketer_username'].value_counts()
+                fig4 = px.bar(marketer_counts, x=marketer_counts.index, y=marketer_counts.values, 
+                              title="Aktivitas per Marketing", labels={'x': 'Nama Marketing', 'y': 'Jumlah Aktivitas'},
+                              color=marketer_counts.values, color_continuous_scale=px.colors.sequential.Viridis)
+                st.plotly_chart(fig4, use_container_width=True)
+    
+    # --- [TETAP ADA] Tabel Aktivitas Terbaru ---
     st.divider()
     st.subheader("Aktivitas Terbaru")
     latest_activities = df.head(5)

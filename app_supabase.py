@@ -1,3 +1,5 @@
+# app_supabase.py
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -21,7 +23,6 @@ def show_login_page():
         if st.form_submit_button("Login"):
             user, error = db.sign_in(email, password)
             if user:
-                # Ambil profil setelah login berhasil
                 profile = db.get_profile(user.id)
                 st.session_state.logged_in = True
                 st.session_state.user = user
@@ -47,7 +48,6 @@ def show_sidebar():
         
         st.divider()
         if st.button("Logout"):
-            # Membersihkan semua session state saat logout
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.rerun()
@@ -59,11 +59,7 @@ def page_dashboard():
     user = st.session_state.user
     profile = st.session_state.profile
     
-    # Ambil data aktivitas
-    if profile.get('role') == 'superadmin':
-        activities = db.get_all_marketing_activities()
-    else:
-        activities = db.get_marketing_activities_by_user_id(user.id)
+    activities = db.get_all_marketing_activities() if profile.get('role') == 'superadmin' else db.get_marketing_activities_by_user_id(user.id)
     
     if not activities:
         st.info("Belum ada data aktivitas untuk ditampilkan.")
@@ -71,7 +67,6 @@ def page_dashboard():
 
     df = pd.DataFrame(activities)
     
-    # --- Metrik Utama ---
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Aktivitas", len(df))
     col2.metric("Total Prospek Unik", df['prospect_name'].nunique())
@@ -81,49 +76,17 @@ def page_dashboard():
     st.divider()
     st.subheader("Analisis Aktivitas Pemasaran")
     
-    # --- Baris Grafik ---
     col1, col2 = st.columns(2)
     with col1:
         status_counts = df['status'].map(STATUS_MAPPING).value_counts()
         fig = px.pie(status_counts, values=status_counts.values, names=status_counts.index, 
                      title="Distribusi Status Prospek", color_discrete_sequence=px.colors.sequential.RdBu)
         st.plotly_chart(fig, use_container_width=True)
-
     with col2:
         type_counts = df['activity_type'].value_counts()
         fig2 = px.bar(type_counts, x=type_counts.index, y=type_counts.values, 
                       title="Distribusi Jenis Aktivitas", labels={'x': 'Jenis Aktivitas', 'y': 'Jumlah'})
         st.plotly_chart(fig2, use_container_width=True)
-
-    # --- Tabel Follow-up Mendatang ---
-    st.divider()
-    st.subheader("Jadwal Follow-up (7 Hari Mendatang)")
-    
-    all_followups = [fu for act in activities for fu in db.get_followups_by_activity_id(act['id'])]
-    for fu in all_followups:
-        fu['prospect_name'] = next((act['prospect_name'] for act in activities if act['id'] == fu['activity_id']), 'N/A')
-
-    if not all_followups:
-        st.info("Tidak ada data follow-up yang ditemukan.")
-    else:
-        followups_df = pd.DataFrame(all_followups)
-        followups_df['next_followup_date'] = pd.to_datetime(followups_df['next_followup_date'], errors='coerce')
-        today = pd.Timestamp.now().normalize()
-        next_week = today + pd.Timedelta(days=7)
-        
-        upcoming_df = followups_df[(followups_df['next_followup_date'] >= today) & (followups_df['next_followup_date'] <= next_week)].sort_values(by='next_followup_date')
-
-        if upcoming_df.empty:
-            st.info("Tidak ada jadwal follow-up dalam 7 hari ke depan.")
-        else:
-            display_cols = ['next_followup_date', 'prospect_name', 'marketer_username', 'next_action']
-            upcoming_df = upcoming_df[display_cols].rename(columns={
-                'next_followup_date': 'Tanggal', 'prospect_name': 'Prospek',
-                'marketer_username': 'Marketing', 'next_action': 'Tindakan'
-            })
-            upcoming_df['Tanggal'] = upcoming_df['Tanggal'].dt.strftime('%A, %d %b %Y')
-            st.dataframe(upcoming_df, use_container_width=True, hide_index=True)
-
 
 def page_activities_management():
     st.title("Manajemen Aktivitas Pemasaran")
@@ -159,7 +122,6 @@ def show_activity_form(activity):
         with col1:
             prospect_name = st.text_input("Nama Prospek*", value=activity.get('prospect_name', '') if activity else "")
             contact_person = st.text_input("Nama Kontak Person", value=activity.get('contact_person', '') if activity else "")
-            # --- PENAMBAHAN FIELD JABATAN ---
             contact_position = st.text_input("Jabatan Kontak Person", value=activity.get('contact_position', '') if activity else "")
             contact_phone = st.text_input("Telepon Kontak", value=activity.get('contact_phone', '') if activity else "")
         with col2:
@@ -174,23 +136,30 @@ def show_activity_form(activity):
         
         submitted = st.form_submit_button(button_label)
         if submitted:
-            if not prospect_name: st.error("Nama Prospek wajib diisi!")
+            if not prospect_name: 
+                st.error("Nama Prospek wajib diisi!")
             else:
                 status_key = REVERSE_STATUS_MAPPING[status_display]
-                # --- MENYELARASKAN PANGGILAN FUNGSI DENGAN MENAMBAHKAN contact_position ---
                 if activity:
                     success, msg = db.edit_marketing_activity(activity['id'], prospect_name, prospect_location, contact_person, contact_position, contact_phone, contact_email, activity_date, activity_type, description, status_key)
                 else:
+                    # INI ADALAH BARIS YANG DIPERBAIKI
                     success, msg, new_id = db.add_marketing_activity(user.id, profile.get('full_name', 'N/A'), prospect_name, prospect_location, contact_person, contact_position, contact_phone, contact_email, activity_date, activity_type, description, status_key)
                 
-                if success: st.success(msg); st.rerun()
-                else: st.error(msg)
+                if success: 
+                    st.success(msg)
+                    st.rerun()
+                else: 
+                    st.error(msg)
     
     if activity and profile.get('role') == 'superadmin':
         if st.button("Hapus Aktivitas Ini", type="primary"):
             success, msg = db.delete_marketing_activity(activity['id'])
-            if success: st.success(msg); st.rerun()
-            else: st.error(msg)
+            if success: 
+                st.success(msg)
+                st.rerun()
+            else: 
+                st.error(msg)
 
 def show_followup_section(activity):
     st.divider()
@@ -199,9 +168,14 @@ def show_followup_section(activity):
     followups = db.get_followups_by_activity_id(activity['id'])
     if followups:
         for fu in followups:
-            fu_time = datetime.fromisoformat(fu['created_at']).strftime('%d %b %Y, %H:%M')
+            fu_time_str = fu['created_at']
+            try:
+                fu_time_display = datetime.fromisoformat(fu_time_str).strftime('%d %b %Y, %H:%M')
+            except ValueError:
+                fu_time_display = fu_time_str
+
             with st.container(border=True):
-                st.markdown(f"**{fu_time} oleh {fu['marketer_username']}**")
+                st.markdown(f"**{fu_time_display} oleh {fu['marketer_username']}**")
                 st.markdown(f"**Catatan:** {fu['notes']}")
                 st.caption(f"Tindak Lanjut: {fu.get('next_action', 'N/A')} | Jadwal: {fu.get('next_followup_date', 'N/A')} | Minat: {fu.get('interest_level', 'N/A')}")
     else:
@@ -216,22 +190,17 @@ def show_followup_section(activity):
         new_status_display = st.selectbox("Update Status Prospek Menjadi:", options=list(STATUS_MAPPING.values()), index=list(STATUS_MAPPING.values()).index(STATUS_MAPPING.get(activity['status'], 'baru')))
 
         if st.form_submit_button("Simpan Follow-up"):
-            if not notes: st.warning("Catatan tidak boleh kosong.")
+            if not notes: 
+                st.warning("Catatan tidak boleh kosong.")
             else:
                 new_status_key = REVERSE_STATUS_MAPPING[new_status_display]
-                # --- MENYELARASKAN PANGGILAN FUNGSI add_followup ---
-                success, msg = db.add_followup(
-                    activity['id'], 
-                    st.session_state.user.id, 
-                    st.session_state.profile.get('full_name', 'N/A'), 
-                    notes, next_action, 
-                    next_followup_date, 
-                    interest_level, 
-                    new_status_key
-                )
-                if success: st.success(msg); st.rerun()
-                else: st.error(msg)
-                    
+                success, msg = db.add_followup(activity['id'], st.session_state.user.id, st.session_state.profile.get('full_name', 'N/A'), notes, next_action, next_followup_date, interest_level, new_status_key)
+                if success: 
+                    st.success(msg)
+                    st.rerun()
+                else: 
+                    st.error(msg)
+
 def page_user_management():
     st.title("Manajemen Pengguna")
     
@@ -241,12 +210,8 @@ def page_user_management():
         st.subheader("Daftar Pengguna Terdaftar")
         profiles = db.get_all_profiles()
         if profiles:
-            df = pd.DataFrame(profiles).rename(columns={'id': 'User ID', 'full_name': 'Nama Lengkap', 'role': 'Role'})
-            st.dataframe(df[['User ID', 'Nama Lengkap', 'Role']], use_container_width=True)
-            
-            # Opsi Hapus (jika ingin diaktifkan)
-            # user_to_delete_id = st.selectbox("Pilih pengguna untuk dihapus", ...)
-            # ...
+            df = pd.DataFrame(profiles).rename(columns={'id': 'User ID', 'full_name': 'Nama Lengkap', 'role': 'Role', 'email': 'Email'})
+            st.dataframe(df[['User ID', 'Nama Lengkap', 'Email', 'Role']], use_container_width=True)
         else:
             st.info("Belum ada pengguna terdaftar.")
 
@@ -281,16 +246,9 @@ def page_settings():
 
 # --- Logika Utama Aplikasi ---
 def main():
-    # Inisialisasi session state jika belum ada
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False
     
-    if "user" not in st.session_state:
-        st.session_state.user = None
-        
-    if "profile" not in st.session_state:
-        st.session_state.profile = None
-
     if not st.session_state.logged_in:
         show_login_page()
     else:

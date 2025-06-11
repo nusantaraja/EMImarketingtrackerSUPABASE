@@ -119,9 +119,9 @@ def page_activities_management():
     else:
         df = pd.DataFrame(activities)
 
-    # --- [PERCANTIK 2] TABEL AKTIVITAS DENGAN PAGINASI ---
     st.subheader("Semua Catatan Aktivitas")
 
+    # Inisialisasi state untuk paginasi
     if 'page_num' not in st.session_state:
         st.session_state.page_num = 1
     
@@ -129,22 +129,12 @@ def page_activities_management():
     total_items = len(df)
     total_pages = max(1, (total_items // items_per_page) + (1 if total_items % items_per_page > 0 else 0))
 
-    col_nav1, col_nav2, col_nav3 = st.columns([1, 8, 1])
-    with col_nav1:
-        if st.button("⬅️ Halaman Sebelumnya", disabled=(st.session_state.page_num <= 1), use_container_width=True):
-            st.session_state.page_num -= 1
-            st.rerun()
-    with col_nav3:
-        if st.button("Halaman Berikutnya ➡️", disabled=(st.session_state.page_num >= total_pages), use_container_width=True):
-            st.session_state.page_num += 1
-            st.rerun()
-    with col_nav2:
-        st.write(f"<div style='text-align: center; margin-top: 10px;'>Halaman <b>{st.session_state.page_num}</b> dari <b>{total_pages}</b></div>", unsafe_allow_html=True)
-
+    # Potong dataframe sesuai halaman
     start_idx = (st.session_state.page_num - 1) * items_per_page
     end_idx = start_idx + items_per_page
     paginated_df = df.iloc[start_idx:end_idx]
 
+    # Menampilkan tabel data yang sudah dipaginasi
     if not paginated_df.empty:
         display_cols = ['activity_date', 'prospect_name', 'prospect_location', 'marketer_username', 'activity_type', 'status']
         paginated_df_display = paginated_df[display_cols].rename(columns={
@@ -153,6 +143,28 @@ def page_activities_management():
         })
         paginated_df_display['Status'] = paginated_df_display['Status'].map(STATUS_MAPPING)
         st.dataframe(paginated_df_display, use_container_width=True, hide_index=True)
+    
+    # --- [PERCANTIK FINAL] KONTROL PAGINASI DI BAWAH TABEL ---
+    st.divider() # Tambahkan garis pemisah agar rapi
+    
+    # Menggunakan kolom untuk menata tombol dan teks
+    col_nav1, col_nav2, col_nav3 = st.columns([3, 2, 3])
+    
+    with col_nav1:
+        # Tombol PREVIOUS di sebelah kiri, tanpa use_container_width
+        if st.button("⬅️ PREVIOUS", disabled=(st.session_state.page_num <= 1)):
+            st.session_state.page_num -= 1
+            st.rerun()
+    
+    with col_nav2:
+        # Teks "Halaman X dari Y" di tengah
+        st.write(f"<div style='text-align: center; margin-top: 5px;'>Halaman <b>{st.session_state.page_num}</b> dari <b>{total_pages}</b></div>", unsafe_allow_html=True)
+
+    with col_nav3:
+        # Tombol NEXT di sebelah kanan, tanpa use_container_width
+        if st.button("NEXT ➡️", disabled=(st.session_state.page_num >= total_pages)):
+            st.session_state.page_num += 1
+            st.rerun()
     
     st.divider()
 

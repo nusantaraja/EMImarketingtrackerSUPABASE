@@ -87,51 +87,39 @@ def page_dashboard():
     st.divider()
     st.subheader("Analisis Aktivitas Pemasaran")
     
-    # --- Baris Grafik Pertama (Status & Jenis Aktivitas) ---
+    # --- Baris Grafik ---
     col1, col2 = st.columns(2)
     with col1:
-        if not df.empty and 'status' in df.columns:
-            status_counts = df['status'].map(STATUS_MAPPING).value_counts()
-            fig = px.pie(status_counts, values=status_counts.values, names=status_counts.index, 
-                         title="Distribusi Status Prospek", color_discrete_sequence=px.colors.sequential.RdBu)
-            st.plotly_chart(fig, use_container_width=True)
+        status_counts = df['status'].map(STATUS_MAPPING).value_counts()
+        fig = px.pie(status_counts, values=status_counts.values, names=status_counts.index, 
+                     title="Distribusi Status Prospek", color_discrete_sequence=px.colors.sequential.RdBu)
+        st.plotly_chart(fig, use_container_width=True)
             
     with col2:
-        if not df.empty and 'activity_type' in df.columns:
-            type_counts = df['activity_type'].value_counts()
-            fig2 = px.bar(type_counts, x=type_counts.index, y=type_counts.values, 
-                          title="Distribusi Jenis Aktivitas", labels={'x': 'Jenis Aktivitas', 'y': 'Jumlah'})
-            st.plotly_chart(fig2, use_container_width=True)
+        type_counts = df['activity_type'].value_counts()
+        fig2 = px.bar(type_counts, x=type_counts.index, y=type_counts.values, 
+                      title="Distribusi Jenis Aktivitas", labels={'x': 'Jenis Aktivitas', 'y': 'Jumlah'})
+        st.plotly_chart(fig2, use_container_width=True)
 
-    # --- Baris Grafik Kedua (Lokasi & Nama Marketing) ---
     if profile.get('role') == 'superadmin':
         col3, col4 = st.columns(2)
         with col3:
-            if not df.empty and 'prospect_location' in df.columns:
-                location_counts = df['prospect_location'].str.strip().str.title().value_counts().nlargest(10)
-                fig3 = px.bar(location_counts, x=location_counts.index, y=location_counts.values, 
-                              title="Top 10 Lokasi Prospek", labels={'x': 'Kota/Lokasi', 'y': 'Jumlah Prospek'})
-                st.plotly_chart(fig3, use_container_width=True)
-                
+            location_counts = df['prospect_location'].str.strip().str.title().value_counts().nlargest(10)
+            fig3 = px.bar(location_counts, x=location_counts.index, y=location_counts.values, 
+                          title="Top 10 Lokasi Prospek", labels={'x': 'Kota/Lokasi', 'y': 'Jumlah Prospek'})
+            st.plotly_chart(fig3, use_container_width=True)
         with col4:
-            if not df.empty and 'marketer_username' in df.columns:
-                marketer_counts = df['marketer_username'].value_counts()
-                fig4 = px.bar(marketer_counts, x=marketer_counts.index, y=marketer_counts.values, 
-                              title="Aktivitas per Marketing", labels={'x': 'Nama Marketing', 'y': 'Jumlah Aktivitas'},
-                              color=marketer_counts.values, color_continuous_scale=px.colors.sequential.Viridis)
-                st.plotly_chart(fig4, use_container_width=True)
+            marketer_counts = df['marketer_username'].value_counts()
+            fig4 = px.bar(marketer_counts, x=marketer_counts.index, y=marketer_counts.values, 
+                          title="Aktivitas per Marketing", labels={'x': 'Nama Marketing', 'y': 'Jumlah Aktivitas'},
+                          color=marketer_counts.values, color_continuous_scale=px.colors.sequential.Viridis)
+            st.plotly_chart(fig4, use_container_width=True)
     
     # --- Tabel Aktivitas Terbaru ---
     st.divider()
     st.subheader("Aktivitas Terbaru")
-    latest_activities = df.head(5).copy() # Gunakan .copy() untuk menghindari SettingWithCopyWarning
-    
-    # --- [PERBAIKAN WAKTU WIB] ---
-    # Konversi kolom 'created_at' ke WIB sebelum ditampilkan
-    latest_activities['Waktu Dibuat'] = latest_activities['created_at'].apply(
-        lambda x: convert_to_wib_and_format(x, format_str='%d %b %Y, %H:%M')
-    )
-    
+    latest_activities = df.head(5).copy()
+    latest_activities['Waktu Dibuat'] = latest_activities['created_at'].apply(lambda x: convert_to_wib_and_format(x, format_str='%d %b %Y, %H:%M'))
     display_cols = ['Waktu Dibuat', 'prospect_name', 'marketer_username', 'status']
     latest_activities_display = latest_activities[display_cols].rename(columns={
         'prospect_name': 'Prospek', 'marketer_username': 'Marketing', 'status': 'Status'
@@ -151,15 +139,22 @@ def page_dashboard():
             fu['prospect_name'] = next((act['prospect_name'] for act in activities if act['id'] == fu['activity_id']), 'N/A')
         
         followups_df = pd.DataFrame(all_followups)
-        followups_df['next_followup_date'] = pd.to_datetime(followups_df['next_followup_date'], errors='coerce')
         
-        today = pd.Timestamp.now(tz='Asia/Jakarta').normalize()
+        # --- [PERBAIKAN UTAMA DI SINI] ---
+        # 1. Konversi kolom tanggal menjadi datetime, dengan kesadaran UTC
+        followups_df['next_followup_date'] = pd.to_datetime(followups_df['next_followup_date'], utc=True)
+        
+        # 2. Tentukan rentang waktu, juga dengan kesadaran zona waktu
+        wib_tz = pytz.timezone("Asia/Jakarta")
+        today = pd.Timestamp.now(tz=wib_tz).normalize()
         next_7_days = today + pd.Timedelta(days=7)
         
+        # 3. Filter dataframe. Pandas sekarang bisa membandingkan keduanya dengan benar.
         upcoming_df = followups_df[
             (followups_df['next_followup_date'] >= today) & 
             (followups_df['next_followup_date'] <= next_7_days)
         ].sort_values(by='next_followup_date')
+        # ------------------------------------
 
         if upcoming_df.empty:
             st.info("Tidak ada jadwal follow-up dalam 7 hari ke depan.")
@@ -169,7 +164,8 @@ def page_dashboard():
                 'next_followup_date': 'Tanggal', 'prospect_name': 'Prospek', 
                 'marketer_username': 'Marketing', 'next_action': 'Tindakan'
             })
-            upcoming_display_df['Tanggal'] = upcoming_display_df['Tanggal'].dt.strftime('%A, %d %b %Y')
+            # Konversi kolom tanggal (yang sekarang sadar timezone) ke WIB sebelum ditampilkan
+            upcoming_display_df['Tanggal'] = upcoming_display_df['Tanggal'].dt.tz_convert(wib_tz).dt.strftime('%A, %d %b %Y')
             st.dataframe(upcoming_display_df, use_container_width=True, hide_index=True)
 
 def page_activities_management():

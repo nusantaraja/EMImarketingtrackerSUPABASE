@@ -206,11 +206,15 @@ def search_prospect_research(keyword):
 
 # --- Sinkronisasi dari Apollo.io API ---
 def sync_prospect_from_apollo(query):
+    """
+    Mengambil data prospek dari Apollo.io berdasarkan query pencarian.
+    """
     url = "https://api.apollo.io/v1/mixed_people_search" 
     headers = {
         "Content-Type": "application/json",
         "Cache-Control": "no-cache"
     }
+
     payload = {
         "api_key": st.secrets["apollo"]["api_key"],
         "query": query,

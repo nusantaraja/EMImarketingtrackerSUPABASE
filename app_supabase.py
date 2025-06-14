@@ -566,22 +566,22 @@ def page_prospect_research():
                             st.error(msg)
 
     # --- Sinkron dari Apollo.io ---
-st.divider()
-st.subheader("Sinkron dari Apollo.io")
-apollo_query = st.text_input("Masukkan query pencarian (misal: industry:Technology AND location:Jakarta)")
-if st.button("Tarik Data dari Apollo.io"):
-    with st.spinner("Menarik data dari Apollo.io..."):
-        raw_prospects = db.sync_prospect_from_apollo(apollo_query)
-        if raw_prospects:
-            saved_count = 0
-            for p in raw_prospects:
-                success, msg = db.add_prospect_research(**p)
-                if success:
-                    saved_count += 1
-            st.success(f"{saved_count} prospek berhasil ditarik dan disimpan.")
-            st.rerun()
-        else:
-            st.info("Tidak ada prospek yang ditemukan.")
+    st.divider()
+    st.subheader("Sinkron dari Apollo.io")
+    apollo_query = st.text_input("Masukkan query pencarian (misal: industry:Technology AND location:Jakarta)")
+    if st.button("Tarik Data dari Apollo.io"):
+        with st.spinner("Menarik data dari Apollo.io..."):
+            raw_prospects = db.sync_prospect_from_apollo(apollo_query)
+            if raw_prospects:
+                saved_count = 0
+                for p in raw_prospects:
+                    success, msg = db.add_prospect_research(**p)
+                    if success:
+                        saved_count += 1
+                st.success(f"{saved_count} prospek berhasil ditarik dan disimpan.")
+                st.rerun()
+            else:
+                st.info("Tidak ada prospek yang ditemukan.")
 
 
 # --- Logika Utama Aplikasi ---

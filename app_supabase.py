@@ -413,7 +413,7 @@ def page_prospect_research():
         st.dataframe(df_display, use_container_width=True, hide_index=True)
 
     st.divider()
-    st.subheader("Form Tambah Prospek Baru")
+    st.subheader("Form Tambah Prospek Baru Hasil Riset")
     with st.form("prospect_form"):
         col1, col2 = st.columns(2)
         with col1:

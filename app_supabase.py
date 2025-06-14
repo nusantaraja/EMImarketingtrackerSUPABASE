@@ -25,8 +25,7 @@ def convert_to_wib_and_format(iso_string, format_str='%A, %d %b %Y, %H:%M'):
         return iso_string
 
 
-# --- Fungsi-fungsi Halaman ---
-
+# --- Fungsi-fungsi Halaman (Pages) ---
 def show_login_page():
     st.title("EMI Marketing Tracker 💼📊")
     with st.form("login_form"):
@@ -53,6 +52,7 @@ def show_sidebar():
         st.write(f"Role: **{profile.get('role', 'N/A').capitalize()}**")
         st.divider()
 
+        # Daftar halaman utama
         pages = ["Dashboard", "Aktivitas Pemasaran", "Riset Prospek"]
         if profile.get('role') == 'superadmin':
             pages.extend(["Manajemen Pengguna", "Pengaturan"])
@@ -106,8 +106,9 @@ def page_dashboard():
         with col3:
             location_counts = df['prospect_location'].str.strip().str.title().value_counts().nlargest(10)
             fig3 = px.bar(location_counts, x=location_counts.index, y=location_counts.values,
-                          title="Top 10 Lokasi Prospek", labels={'x': 'Kota/Lokasi', 'y': 'Jumlah Prospek'})
-            st.plotly_chart(fig3, use_container_width=True)
+                          title="Top 10 Lokasi Prospek", labels={'x': 'Kota/Lokasi', 'y': 'Jumlah Prospek'},
+                          color_continuous_scale=px.colors.sequential.Viridis, use_container_width=True)
+            st.plotly_chart(fig3)
         with col4:
             marketer_counts = df['marketer_username'].value_counts()
             fig4 = px.bar(marketer_counts, x=marketer_counts.index, y=marketer_counts.values,
@@ -154,32 +155,29 @@ def page_dashboard():
             st.dataframe(upcoming_display_df, use_container_width=True, hide_index=True)
         else:
             st.info("Tidak ada jadwal follow-up dalam 7 hari ke depan.")
-    
-    # --- Sinkron dari Apollo.io (Hanya untuk Superadmin) ---
-st.divider()
-st.subheader("Sinkron dari Apollo.io")
-if profile.get('role') == 'superadmin':
-    apollo_query = st.text_input("Masukkan query pencarian (misal: industry:Technology AND location:Jakarta)")
-    
-    if st.button("Tarik Data dari Apollo.io"):
-        with st.spinner("Menarik data dari Apollo.io..."):
-            raw_prospects = db.sync_prospect_from_apollo(apollo_query)
-            if raw_prospects:
-                saved_count = 0
-                for p in raw_prospects:
-                    p["marketer_id"] = st.session_state.user.id
-                    p["marketer_username"] = st.session_state.profile.get("full_name")
 
-                    success, msg = db.add_prospect_research(**p)
-                    if success:
-                        saved_count += 1
-
-                st.success(f"{saved_count} prospek berhasil ditarik dan disimpan.")
-                st.rerun()
-            else:
-                st.info("Tidak ada prospek baru yang ditemukan.")
-else:
-    st.warning("Fitur ini hanya tersedia untuk superadmin.")
+    # --- Sinkron dari Apollo.io (Superadmin Only) ---
+    st.divider()
+    st.subheader("Sinkron dari Apollo.io")
+    if profile.get('role') == 'superadmin':
+        apollo_query = st.text_input("Masukkan query pencarian (misal: industry:Technology AND location:Jakarta)")
+        if st.button("Tarik Data dari Apollo.io"):
+            with st.spinner("Menarik data dari Apollo.io..."):
+                raw_prospects = db.sync_prospect_from_apollo(apollo_query)
+                if raw_prospects:
+                    saved_count = 0
+                    for p in raw_prospects:
+                        p["marketer_id"] = user.id
+                        p["marketer_username"] = profile.get("full_name")
+                        success, msg = db.add_prospect_research(**p)
+                        if success:
+                            saved_count += 1
+                    st.success(f"{saved_count} prospek berhasil ditarik dan disimpan.")
+                    st.rerun()
+                else:
+                    st.info("Tidak ada prospek baru yang ditemukan.")
+    else:
+        st.warning("Fitur ini hanya tersedia untuk superadmin.")
 
 
 def page_activities_management():
@@ -214,6 +212,7 @@ def page_activities_management():
         paginated_df_display['Status'] = paginated_df_display['Status'].map(STATUS_MAPPING)
         st.dataframe(paginated_df_display, use_container_width=True, hide_index=True)
 
+    st.divider()
     col_nav1, col_nav2, col_nav3 = st.columns([3, 2, 3])
     with col_nav1:
         if st.button("⬅️ PREVIOUS", disabled=(st.session_state.page_num <= 1)):
@@ -265,7 +264,7 @@ def show_activity_form(activity):
         description = st.text_area("Deskripsi", value=activity.get('description', '') if activity else "", height=150)
         submitted = st.form_submit_button(button_label)
         if submitted:
-            if not prospect_name:
+            if not prospect_name or not contact_person:
                 st.error("Nama Prospek wajib diisi!")
             else:
                 status_key = REVERSE_STATUS_MAPPING[status_display]
@@ -331,6 +330,7 @@ def show_followup_section(activity):
                 st.markdown(f"**{fu_time_display} WIB oleh {fu['marketer_username']}**")
                 st.markdown(f"**Catatan:** {fu['notes']}")
                 st.caption(f"Tindak Lanjut: {fu.get('next_action', 'N/A')} | Jadwal: {fu.get('next_followup_date', 'N/A')} | Minat: {fu.get('interest_level', 'N/A')}")
+
     else:
         st.caption("Belum ada follow-up untuk aktivitas ini.")
 
@@ -402,12 +402,15 @@ def page_settings():
         app_name = st.text_input("Nama Aplikasi", value=config.get('app_name', ''))
         submitted = st.form_submit_button("Simpan Pengaturan")
         if submitted:
-            success, msg = db.update_app_config({'app_name': app_name})
-            if success:
-                st.success(msg)
-                st.rerun()
+            if not app_name:
+                st.error("Nama aplikasi wajib diisi!")
             else:
-                st.error(msg)
+                success, msg = db.update_app_config({'app_name': app_name})
+                if success:
+                    st.success(msg)
+                    st.rerun()
+                else:
+                    st.error(msg)
 
 
 def page_prospect_research():
@@ -424,7 +427,7 @@ def page_prospect_research():
     # --- Form Pencarian ---
     st.subheader("Cari Prospek")
     search_query = st.text_input("Ketik nama perusahaan, kontak, industri, atau lokasi...")
-
+    
     if search_query:
         filtered_prospects = db.search_prospect_research(search_query)
         st.info(f"Menemukan {len(filtered_prospects)} hasil pencarian untuk '{search_query}'")
@@ -590,24 +593,6 @@ def page_prospect_research():
                             st.rerun()
                         else:
                             st.error(msg)
-
-    # --- Sinkron dari Apollo.io ---
-    st.divider()
-    st.subheader("Sinkron dari Apollo.io")
-    apollo_query = st.text_input("Masukkan query pencarian (misal: industry:Technology AND location:Jakarta)")
-    if st.button("Tarik Data dari Apollo.io"):
-        with st.spinner("Menarik data dari Apollo.io..."):
-            raw_prospects = db.sync_prospect_from_apollo(apollo_query)
-            if raw_prospects:
-                saved_count = 0
-                for p in raw_prospects:
-                    success, msg = db.add_prospect_research(**p)
-                    if success:
-                        saved_count += 1
-                st.success(f"{saved_count} prospek berhasil ditarik dan disimpan.")
-                st.rerun()
-            else:
-                st.info("Tidak ada prospek yang ditemukan.")
 
 
 # --- Logika Utama Aplikasi ---

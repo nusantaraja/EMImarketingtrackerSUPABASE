@@ -13,9 +13,8 @@ def init_connection() -> Client:
         key = st.secrets["supabase"]["key"]
         return create_client(url, key)
     except Exception as e:
-        # Menampilkan error di UI jika secrets tidak ditemukan
+        # Menampilkan error jika secrets tidak ditemukan
         st.error("Gagal terhubung ke Supabase. Pastikan Anda telah mengatur `url` dan `key` Supabase di Streamlit Secrets.")
-        # Menghentikan eksekusi aplikasi jika koneksi gagal
         st.stop()
         return None
 
@@ -28,7 +27,6 @@ def sign_in(email, password):
         response = supabase.auth.sign_in_with_password({"email": email, "password": password})
         return response.user, None
     except Exception as e:
-        # Mengambil pesan error yang lebih spesifik dari Supabase
         error_message = str(e.args[0]['message']) if e.args and isinstance(e.args[0], dict) else str(e)
         return None, error_message
 
@@ -37,12 +35,12 @@ def sign_up(email, password, full_name, role):
     """Mendaftarkan pengguna baru dan membuat profilnya."""
     supabase = init_connection()
     try:
-        # 1. Daftarkan user ke sistem Auth Supabase
+        # 1. Daftar user baru via Supabase Auth
         response = supabase.auth.sign_up({"email": email, "password": password})
         user = response.user
-        
+
         if user:
-            # 2. Jika berhasil, buat profilnya di tabel 'profiles'
+            # 2. Simpan data profil
             profile_data = {
                 "id": user.id,
                 "full_name": full_name,
@@ -50,7 +48,7 @@ def sign_up(email, password, full_name, role):
                 "email": email
             }
             supabase.from_("profiles").insert(profile_data).execute()
-        
+
         return user, None
     except Exception as e:
         error_message = str(e.args[0]['message']) if e.args and isinstance(e.args[0], dict) else str(e)
@@ -67,7 +65,7 @@ def get_profile(user_id):
         return None
 
 
-# --- Fungsi Manajemen Pengguna (Superadmin Only) ---
+# --- Manajemen Pengguna (Superadmin Only) ---
 def get_all_profiles():
     """Mengambil semua profil pengguna dari tabel profiles."""
     supabase = init_connection()
@@ -84,7 +82,7 @@ def delete_user_by_id(user_id):
     return False, "Fitur Hapus Pengguna sedang dalam pengembangan demi keamanan."
 
 
-# --- Fungsi Riset Prospek ---
+# --- Riset Prospek CRUD ---
 def get_all_prospect_research():
     """Mengambil semua prospek untuk superadmin"""
     supabase = init_connection()
@@ -207,13 +205,13 @@ def search_prospect_research(keyword):
 # --- Sinkronisasi dari Apollo.io API ---
 def sync_prospect_from_apollo(query):
     """
-    Menarik data prospek dari Apollo.io via Mixed People Search API
+    Mengambil data prospek dari Apollo.io berdasarkan query pencarian.
     """
     url = "https://api.apollo.io/v1/mixed_people_search" 
     headers = {
         "Content-Type": "application/json",
         "Cache-Control": "no-cache",
-        "X-Api-Key": st.secrets["apollo"]["api_key"]  # ✅ Benar: di headers
+        "X-Api-Key": st.secrets["apollo"]["api_key"]  # ✅ Benar: dikirim lewat headers
     }
 
     payload = {
@@ -224,7 +222,6 @@ def sync_prospect_from_apollo(query):
 
     try:
         response = requests.post(url, json=payload, headers=headers)
-
         if response.status_code == 200:
             people = response.json().get("people", [])
             prospects = []
@@ -267,7 +264,7 @@ def sync_prospect_from_apollo(query):
         return []
 
 
-# --- Fungsi Konfigurasi Aplikasi ---
+# --- Konfigurasi Aplikasi ---
 def get_app_config():
     """Mengambil konfigurasi aplikasi dari tabel config."""
     supabase = init_connection()
@@ -280,7 +277,7 @@ def get_app_config():
 
 
 def update_app_config(new_config):
-    """Memperbarui konfigurasi aplikasi"""
+    """Memperbarui konfigurasi aplikasi."""
     supabase = init_connection()
     try:
         for key, value in new_config.items():
@@ -290,7 +287,7 @@ def update_app_config(new_config):
         return False, f"Error: {e}"
 
 
-# --- Fungsi CRUD Aktivitas Pemasaran ---
+# --- Marketing Activities CRUD ---
 def get_all_marketing_activities():
     """Mengambil semua aktivitas pemasaran"""
     supabase = init_connection()
@@ -329,7 +326,7 @@ def add_marketing_activity(marketer_id, marketer_username, prospect_name, prospe
     supabase = init_connection()
     try:
         activity_date_str = activity_date.strftime("%Y-%m-%d") if isinstance(activity_date, datetime) else str(activity_date)
-        
+
         data_to_insert = {
             "marketer_id": marketer_id,
             "marketer_username": marketer_username,
@@ -344,14 +341,12 @@ def add_marketing_activity(marketer_id, marketer_username, prospect_name, prospe
             "description": description,
             "status": status
         }
-        
+
         response = supabase.from_("marketing_activities").insert(data_to_insert).execute()
-        
         if response.data:
-            return True, "Aktivitas berhasil ditambahkan.", response.data[0]['id']
+            return True, "Aktivitas berhasil ditambahkan.", response.data[0]["id"]
         else:
-            raise Exception(response.error.message if hasattr(response, 'error') and response.error else "Unknown error")
-            
+            raise Exception(response.error.message if hasattr(response, 'error') else "Unknown error")
     except Exception as e:
         return False, f"Gagal menambahkan aktivitas: {e}", None
 
@@ -361,7 +356,7 @@ def edit_marketing_activity(activity_id, prospect_name, prospect_location, conta
     supabase = init_connection()
     try:
         activity_date_str = activity_date.strftime("%Y-%m-%d") if isinstance(activity_date, datetime) else str(activity_date)
-        
+
         data_to_update = {
             "prospect_name": prospect_name,
             "prospect_location": prospect_location,
@@ -374,39 +369,36 @@ def edit_marketing_activity(activity_id, prospect_name, prospect_location, conta
             "description": description,
             "status": status
         }
-        
+
         response = supabase.from_("marketing_activities").update(data_to_update).eq("id", activity_id).execute()
-        
         if response.data:
             return True, "Aktivitas berhasil diperbarui."
         else:
-            raise Exception(response.error.message if hasattr(response, 'error') and response.error else "Unknown error")
-            
+            raise Exception(response.error.message if hasattr(response, 'error') else "Unknown error")
     except Exception as e:
-        return False, f"Gagal memperbarui: {e}"
+        return False, f"Gagal memperbarui aktivitas: {e}"
 
 
 def delete_marketing_activity(activity_id):
-    """Menghapus aktivitas pemasaran"""
+    """Menghapus aktivitas pemasaran beserta follow-up-nya."""
     supabase = init_connection()
     try:
-        # 1. Hapus follow-up terlebih dahulu
+        # Hapus follow-up terlebih dahulu
         supabase.from_("followups").delete().eq("activity_id", activity_id).execute()
-        # 2. Hapus aktivitas utamanya
+        # Hapus aktivitas utama
         response = supabase.from_("marketing_activities").delete().eq("id", activity_id).execute()
-        
+
         if response.data:
             return True, "Aktivitas berhasil dihapus."
         else:
-            raise Exception(response.error.message if hasattr(response, 'error') and response.error else "Unknown error")
-            
+            raise Exception(response.error.message if hasattr(response, 'error') else "Unknown error")
     except Exception as e:
-        return False, f"Gagal menghapus: {e}"
+        return False, f"Gagal menghapus aktivitas: {e}"
 
 
-# --- Fungsi Follow-up ---
+# --- Follow-up CRUD ---
 def get_followups_by_activity_id(activity_id):
-    """Mengambil semua follow-up untuk aktivitas tertentu"""
+    """Mengambil semua follow-up untuk satu aktivitas."""
     supabase = init_connection()
     try:
         response = supabase.from_("followups").select("*").eq("activity_id", activity_id).order("created_at", desc=True).execute()
@@ -417,15 +409,15 @@ def get_followups_by_activity_id(activity_id):
 
 
 def add_followup(activity_id, marketer_id, marketer_username, notes, next_action, next_followup_date, interest_level, status_update):
-    """Menambahkan follow-up baru"""
+    """Menambahkan follow-up baru dan memperbarui status aktivitas."""
     supabase = init_connection()
     try:
         # 1. Update status aktivitas utama
         supabase.from_("marketing_activities").update({"status": status_update}).eq("id", activity_id).execute()
-        
-        # 2. Siapkan dan simpan data follow-up
+
+        # 2. Tambahkan follow-up
         next_followup_date_str = next_followup_date.strftime("%Y-%m-%d") if next_followup_date else None
-        
+
         data_to_insert = {
             "activity_id": activity_id,
             "marketer_id": marketer_id,
@@ -435,13 +427,11 @@ def add_followup(activity_id, marketer_id, marketer_username, notes, next_action
             "next_followup_date": next_followup_date_str,
             "interest_level": interest_level
         }
-        
+
         response = supabase.from_("followups").insert(data_to_insert).execute()
-        
         if response.data:
             return True, "Follow-up berhasil ditambahkan."
         else:
-            raise Exception(response.error.message if hasattr(response, 'error') and response.error else "Unknown error")
-
+            raise Exception(response.error.message if hasattr(response, 'error') else "Unknown error")
     except Exception as e:
         return False, f"Gagal menambahkan follow-up: {e}"

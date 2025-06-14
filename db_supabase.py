@@ -207,16 +207,16 @@ def search_prospect_research(keyword):
 # --- Sinkronisasi dari Apollo.io API ---
 def sync_prospect_from_apollo(query):
     """
-    Mengambil data prospek dari Apollo.io berdasarkan query pencarian.
+    Menarik data prospek dari Apollo.io via Mixed People Search API
     """
     url = "https://api.apollo.io/v1/mixed_people_search" 
     headers = {
         "Content-Type": "application/json",
-        "Cache-Control": "no-cache"
+        "Cache-Control": "no-cache",
+        "X-Api-Key": st.secrets["apollo"]["api_key"]  # ✅ Benar: di headers
     }
 
     payload = {
-        "api_key": st.secrets["apollo"]["api_key"],
         "query": query,
         "page": 1,
         "page_size": 10
@@ -224,6 +224,7 @@ def sync_prospect_from_apollo(query):
 
     try:
         response = requests.post(url, json=payload, headers=headers)
+
         if response.status_code == 200:
             people = response.json().get("people", [])
             prospects = []

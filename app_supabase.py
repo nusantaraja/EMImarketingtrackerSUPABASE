@@ -154,6 +154,32 @@ def page_dashboard():
             st.dataframe(upcoming_display_df, use_container_width=True, hide_index=True)
         else:
             st.info("Tidak ada jadwal follow-up dalam 7 hari ke depan.")
+    
+    # --- Sinkron dari Apollo.io (Hanya untuk Superadmin) ---
+st.divider()
+st.subheader("Sinkron dari Apollo.io")
+if profile.get('role') == 'superadmin':
+    apollo_query = st.text_input("Masukkan query pencarian (misal: industry:Technology AND location:Jakarta)")
+    
+    if st.button("Tarik Data dari Apollo.io"):
+        with st.spinner("Menarik data dari Apollo.io..."):
+            raw_prospects = db.sync_prospect_from_apollo(apollo_query)
+            if raw_prospects:
+                saved_count = 0
+                for p in raw_prospects:
+                    p["marketer_id"] = st.session_state.user.id
+                    p["marketer_username"] = st.session_state.profile.get("full_name")
+
+                    success, msg = db.add_prospect_research(**p)
+                    if success:
+                        saved_count += 1
+
+                st.success(f"{saved_count} prospek berhasil ditarik dan disimpan.")
+                st.rerun()
+            else:
+                st.info("Tidak ada prospek baru yang ditemukan.")
+else:
+    st.warning("Fitur ini hanya tersedia untuk superadmin.")
 
 
 def page_activities_management():

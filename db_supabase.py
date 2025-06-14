@@ -27,7 +27,7 @@ def sign_in(email, password):
         response = supabase.auth.sign_in_with_password({"email": email, "password": password})
         return response.user, None
     except Exception as e:
-        error_message = str(e.args[0]['message']) if e.args and isinstance(e.args[0], dict) else str(e)
+        error_message = str(e.args[0]["message"]) if e.args and isinstance(e.args[0], dict) else str(e)
         return None, error_message
 
 
@@ -51,7 +51,7 @@ def sign_up(email, password, full_name, role):
 
         return user, None
     except Exception as e:
-        error_message = str(e.args[0]['message']) if e.args and isinstance(e.args[0], dict) else str(e)
+        error_message = str(e.args[0]["message"]) if e.args and isinstance(e.args[0], dict) else str(e)
         return None, error_message
 
 
@@ -203,21 +203,24 @@ def search_prospect_research(keyword):
 
 
 # --- Sinkronisasi dari Apollo.io API ---
-def sync_prospect_from_apollo(query):
+def sync_prospect_from_apollo(filters: dict):
     """
-    Mengambil data prospek dari Apollo.io berdasarkan query pencarian.
+    Mengambil data prospek dari Apollo.io berdasarkan filter pencarian.
+    Filters harus berupa dictionary yang sesuai dengan parameter payload Apollo.io API.
+    Contoh: {"q_organization_industries": ["Technology"], "organization_locations": ["Jakarta"]}
     """
     url = "https://api.apollo.io/v1/mixed_people_search" 
     headers = {
         "Content-Type": "application/json",
         "Cache-Control": "no-cache",
-        "X-Api-Key": st.secrets["apollo"]["api_key"]  # ✅ Benar: dikirim lewat headers
+        "X-Api-Key": st.secrets["apollo"]["api_key"]
     }
 
+    # Gabungkan filter dengan parameter default
     payload = {
-        "query": query,
         "page": 1,
-        "page_size": 10
+        "page_size": 10,
+        **filters  # Menggabungkan filter yang diberikan
     }
 
     try:
@@ -270,7 +273,7 @@ def get_app_config():
     supabase = init_connection()
     try:
         response = supabase.from_("config").select("*").execute()
-        config = {item['key']: item['value'] for item in response.data}
+        config = {item["key"]: item["value"] for item in response.data}
         return config
     except Exception:
         return {"app_name": "Default Tracker"}
@@ -412,22 +415,20 @@ def add_followup(activity_id, marketer_id, marketer_username, notes, next_action
     """Menambahkan follow-up baru dan memperbarui status aktivitas."""
     supabase = init_connection()
     try:
-        # 1. Update status aktivitas utama
-        supabase.from_("marketing_activities").update({"status": status_update}).eq("id", activity_id).execute()
+        # 1. Update status aktivitas utama jika ada status_update
+        if status_update:
+            supabase.from_("marketing_activities").update({"status": status_update}).eq("id", activity_id).execute()
 
-        # 2. Tambahkan follow-up
-        next_followup_date_str = next_followup_date.strftime("%Y-%m-%d") if next_followup_date else None
-
+        # 2. Tambahkan follow-up baru
         data_to_insert = {
             "activity_id": activity_id,
             "marketer_id": marketer_id,
             "marketer_username": marketer_username,
             "notes": notes,
             "next_action": next_action,
-            "next_followup_date": next_followup_date_str,
+            "next_followup_date": next_followup_date,
             "interest_level": interest_level
         }
-
         response = supabase.from_("followups").insert(data_to_insert).execute()
         if response.data:
             return True, "Follow-up berhasil ditambahkan."
@@ -435,3 +436,5 @@ def add_followup(activity_id, marketer_id, marketer_username, notes, next_action
             raise Exception(response.error.message if hasattr(response, 'error') else "Unknown error")
     except Exception as e:
         return False, f"Gagal menambahkan follow-up: {e}"
+
+

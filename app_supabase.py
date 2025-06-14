@@ -399,7 +399,7 @@ def page_prospect_research():
     # --- Form Pencarian ---
     st.subheader("Cari Prospek")
     search_query = st.text_input("Ketik nama perusahaan, kontak, industri, atau lokasi...")
-
+    
     if search_query:
         filtered_prospects = db.search_prospect_research(search_query)
         st.info(f"Menemukan {len(filtered_prospects)} hasil pencarian untuk '{search_query}'")
@@ -498,6 +498,76 @@ def page_prospect_research():
                         st.error(msg)
     else:
         prospect = db.get_prospect_by_id(selected_id)
+        if prospect:
+            st.subheader(f"Edit Prospek: {prospect['company_name']} - {prospect['contact_name']}")
+            with st.form("edit_prospect_form"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    company_name = st.text_input("Nama Perusahaan*", value=prospect.get('company_name'))
+                    website = st.text_input("Website", value=prospect.get('website'))
+                    industry = st.text_input("Industri", value=prospect.get('industry'))
+                    founded_year = st.number_input("Tahun Berdiri", min_value=1900, max_value=datetime.now().year, step=1, value=prospect.get('founded_year') or 1900)
+                    company_size = st.text_input("Jumlah Karyawan", value=prospect.get('company_size'))
+                    revenue = st.text_input("Pendapatan Tahunan", value=prospect.get('revenue'))
+
+                with col2:
+                    contact_name = st.text_input("Nama Kontak", value=prospect.get('contact_name'))
+                    contact_title = st.text_input("Jabatan", value=prospect.get('contact_title'))
+                    contact_email = st.text_input("Email", value=prospect.get('contact_email'))
+                    linkedin_url = st.text_input("LinkedIn URL", value=prospect.get('linkedin_url'))
+                    phone = st.text_input("Nomor Telepon", value=prospect.get('phone'))
+                    location = st.text_input("Lokasi Kantor", value=prospect.get('location'))
+
+                st.subheader("Detail Tambahan")
+                keywords = st.text_input("Kata Kunci (pisahkan dengan koma)", value=", ".join(prospect.get('keywords', [])))
+                technology_used = st.text_input("Teknologi Digunakan (pisahkan dengan koma)", value=", ".join(prospect.get('technology_used', [])))
+                notes = st.text_area("Catatan", value=prospect.get('notes', ''))
+                next_step = st.text_input("Langkah Lanjutan", value=prospect.get('next_step', ''))
+                next_step_date = st.date_input("Tanggal Follow-up", value=prospect.get('next_step_date'))
+                status = st.selectbox("Status Prospek", ["baru", "dalam_proses", "berhasil", "gagal"], index=["baru", "dalam_proses", "berhasil", "gagal"].index(prospect.get('status', 'baru')))
+                source = st.text_input("Sumber Prospek", value=prospect.get('source', 'manual'))
+
+                submitted = st.form_submit_button("Simpan Perubahan")
+                if submitted:
+                    if not company_name or not contact_name:
+                        st.error("Nama perusahaan dan nama kontak wajib diisi!")
+                    else:
+                        keyword_list = [k.strip() for k in keywords.split(",")] if keywords else []
+                        tech_list = [t.strip() for t in technology_used.split(",")] if technology_used else []
+
+                        success, msg = db.edit_prospect_research(
+                            prospect_id=selected_id,
+                            company_name=company_name,
+                            website=website,
+                            industry=industry,
+                            founded_year=founded_year,
+                            company_size=company_size,
+                            revenue=revenue,
+                            location=location,
+                            contact_name=contact_name,
+                            contact_title=contact_title,
+                            contact_email=contact_email,
+                            linkedin_url=linkedin_url,
+                            phone=phone,
+                            keywords=keyword_list,
+                            technology_used=tech_list,
+                            notes=notes,
+                            next_step=next_step,
+                            next_step_date=next_step_date,
+                            status=status,
+                            source=source,
+                            decision_maker=False,
+                            email_status="valid"
+                        )
+
+                        if success:
+                            st.success(msg)
+                            st.rerun()
+                        else:
+                            st.error(msg)
+
+        else:
+            prospect = db.get_prospect_by_id(selected_id)
         if prospect:
             st.subheader(f"Edit Prospek: {prospect['company_name']} - {prospect['contact_name']}")
             with st.form("edit_prospect_form"):

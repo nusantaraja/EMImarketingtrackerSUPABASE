@@ -13,7 +13,7 @@ REVERSE_STATUS_MAPPING = {v: k for k, v in STATUS_MAPPING.items()}
 ACTIVITY_TYPES = ["Presentasi", "Demo Produk", "Follow-up Call", "Email", "Meeting", "Lainnya"]
 
 # --- Fungsi Helper untuk Waktu ---
-def convert_to_wib_and_format(iso_string, format_str=\'%A, %d %b %Y, %H:%M\'):
+def convert_to_wib_and_format(iso_string, format_str="%A, %d %b %Y, %H:%M"):
     """Mengkonversi string ISO 8601 dari Supabase ke WIB dan memformatnya."""
     if not iso_string:
         return "N/A"
@@ -24,7 +24,6 @@ def convert_to_wib_and_format(iso_string, format_str=\'%A, %d %b %Y, %H:%M\'):
         return dt_wib.strftime(format_str)
     except (ValueError, TypeError):
         return iso_string
-
 
 # --- Fungsi-fungsi Halaman (Pages) ---
 def show_login_page():
@@ -49,13 +48,13 @@ def show_sidebar():
     with st.sidebar:
         profile = st.session_state.profile
         st.title("Menu Navigasi")
-        st.write(f"Selamat datang, **{profile.get(\'full_name\', \'User\')}**!")
-        st.write(f"Role: **{profile.get(\'role\', \'N/A\').capitalize()}**")
+        st.write(f"Selamat datang, **{profile.get('full_name', 'User')}**!")
+        st.write(f"Role: **{profile.get('role', 'N/A').capitalize()}**")
         st.divider()
 
         # Daftar halaman utama
         pages = ["Dashboard", "Aktivitas Pemasaran", "Riset Prospek"]
-        if profile.get(\'role\') == \'superadmin\':
+        if profile.get('role') == 'superadmin':
             pages.extend(["Manajemen Pengguna", "Pengaturan"])
 
         page = st.radio("Pilih Halaman:", pages)
@@ -68,14 +67,12 @@ def show_sidebar():
 
         return page
 
-
 def page_dashboard():
-    st.title(f"Dashboard {st.session_state.profile.get(\'role\', \'\').capitalize()}")
+    st.title(f"Dashboard {st.session_state.profile.get('role', '').capitalize()}")
     user = st.session_state.user
     profile = st.session_state.profile
 
-    activities = db.get_all_marketing_activities() if profile.get(\'role\') == \'superadmin\' else db.get_marketing_activities_by_user_id(user.id)
-    
+    activities = db.get_all_marketing_activities() if profile.get('role') == 'superadmin' else db.get_marketing_activities_by_user_id(user.id)    
     if not activities:
         st.info("Belum ada data aktivitas untuk ditampilkan.")
         df = pd.DataFrame()
@@ -84,20 +81,18 @@ def page_dashboard():
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Aktivitas", len(df))
-    col2.metric("Total Prospek Unik", df[\'prospect_name\'].nunique())
-    if profile.get(\'role\') == \'superadmin\':
-        col3.metric("Jumlah Tim Marketing", df[\'marketer_id\'].nunique())
-
+    col2.metric("Total Prospek Unik", df['prospect_name'].nunique())
+    if profile.get('role') == 'superadmin':
+        col3.metric("Jumlah Tim Marketing", df['marketer_id'].nunique())
     st.divider()
     st.subheader("Analisis Aktivitas Pemasaran")
 
     col1, col2 = st.columns(2)
     with col1:
-        status_counts = df[\'status\'].map(STATUS_MAPPING).value_counts()
+        status_counts = df['status'].map(STATUS_MAPPING).value_counts()
         fig = px.pie(status_counts, values=status_counts.values, names=status_counts.index,
                      title="Distribusi Status Prospek", color_discrete_sequence=px.colors.sequential.RdBu)
-        st.plotly_chart(fig, use_container_width=True)
-    with col2:
+        st.plotly_chart(fig, use_container_width=True)    with col2:
         type_counts = df[\'activity_type\'].value_counts()
         fig2 = px.bar(type_counts, x=type_counts.index, y=type_counts.values,
                       title="Distribusi Jenis Aktivitas", labels={\'x\': \'Jenis Aktivitas\', \'y\': \'Jumlah\'})

@@ -77,9 +77,10 @@ def page_dashboard():
 
     if not activities:
         st.info("Belum ada data aktivitas untuk ditampilkan.")
-        return
+        df = pd.DataFrame()
+    else:
+        df = pd.DataFrame(activities)
 
-    df = pd.DataFrame(activities)
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Aktivitas", len(df))
     col2.metric("Total Prospek Unik", df['prospect_name'].nunique())
@@ -106,9 +107,8 @@ def page_dashboard():
         with col3:
             location_counts = df['prospect_location'].str.strip().str.title().value_counts().nlargest(10)
             fig3 = px.bar(location_counts, x=location_counts.index, y=location_counts.values,
-                          title="Top 10 Lokasi Prospek", labels={'x': 'Kota/Lokasi', 'y': 'Jumlah Prospek'},
-                          color_continuous_scale=px.colors.sequential.Viridis, use_container_width=True)
-            st.plotly_chart(fig3)
+                          title="Top 10 Lokasi Prospek", labels={'x': 'Kota/Lokasi', 'y': 'Jumlah Prospek'})
+            st.plotly_chart(fig3, use_container_width=True)
         with col4:
             marketer_counts = df['marketer_username'].value_counts()
             fig4 = px.bar(marketer_counts, x=marketer_counts.index, y=marketer_counts.values,
@@ -159,6 +159,7 @@ def page_dashboard():
     # --- Sinkron dari Apollo.io (Superadmin Only) ---
     st.divider()
     st.subheader("Sinkron dari Apollo.io")
+    
     if profile.get('role') == 'superadmin':
         apollo_query = st.text_input("Masukkan query pencarian (misal: industry:Technology AND location:Jakarta)")
         if st.button("Tarik Data dari Apollo.io"):
@@ -167,11 +168,13 @@ def page_dashboard():
                 if raw_prospects:
                     saved_count = 0
                     for p in raw_prospects:
-                        p["marketer_id"] = user.id
-                        p["marketer_username"] = profile.get("full_name")
+                        p["marketer_id"] = st.session_state.user.id
+                        p["marketer_username"] = st.session_state.profile.get("full_name")
+
                         success, msg = db.add_prospect_research(**p)
                         if success:
                             saved_count += 1
+
                     st.success(f"{saved_count} prospek berhasil ditarik dan disimpan.")
                     st.rerun()
                 else:
@@ -264,7 +267,7 @@ def show_activity_form(activity):
         description = st.text_area("Deskripsi", value=activity.get('description', '') if activity else "", height=150)
         submitted = st.form_submit_button(button_label)
         if submitted:
-            if not prospect_name or not contact_person:
+            if not prospect_name:
                 st.error("Nama Prospek wajib diisi!")
             else:
                 status_key = REVERSE_STATUS_MAPPING[status_display]
@@ -427,7 +430,7 @@ def page_prospect_research():
     # --- Form Pencarian ---
     st.subheader("Cari Prospek")
     search_query = st.text_input("Ketik nama perusahaan, kontak, industri, atau lokasi...")
-    
+
     if search_query:
         filtered_prospects = db.search_prospect_research(search_query)
         st.info(f"Menemukan {len(filtered_prospects)} hasil pencarian untuk '{search_query}'")

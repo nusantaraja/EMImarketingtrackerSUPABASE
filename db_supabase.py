@@ -322,16 +322,3 @@ def edit_prospect_research(prospect_id, **kwargs):
     except Exception as e:
         return False, f"Gagal memperbarui prospek: {e}"
 
-def search_prospect_research(keyword):
-    supabase = init_connection()
-    try:
-        response = supabase.from_("prospect_research").select("*").or_(
-            f"company_name.ilike.%{keyword}%,"
-            f"contact_name.ilike.%{keyword}%,"
-            f"industry.ilike.%{keyword}%," 
-            f"location.ilike.%{keyword}%"
-        ).execute()
-        return response.data
-    except Exception as e:
-        st.error(f"Error saat mencari prospek: {e}")
-        return []

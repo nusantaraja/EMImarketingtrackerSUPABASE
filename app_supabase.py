@@ -403,15 +403,14 @@ def page_prospect_research():
     st.subheader("Daftar Prospek")
     if not prospects:
         st.info("Belum ada data prospek.")
-        return
-
-    df = pd.DataFrame(prospects)
-    display_cols = ['company_name', 'contact_name', 'industry', 'status']
-    df_display = df[display_cols].rename(columns={
-        'company_name': 'Perusahaan', 'contact_name': 'Kontak', 'industry': 'Industri', 'status': 'Status'
-    })
-    df_display['Status'] = df_display['Status'].map(STATUS_MAPPING)
-    st.dataframe(df_display, use_container_width=True, hide_index=True)
+    else:
+        df = pd.DataFrame(prospects)
+        display_cols = ['company_name', 'contact_name', 'industry', 'status']
+        df_display = df[display_cols].rename(columns={
+            'company_name': 'Perusahaan', 'contact_name': 'Kontak', 'industry': 'Industri', 'status': 'Status'
+        })
+        df_display['Status'] = df_display['Status'].map(STATUS_MAPPING)
+        st.dataframe(df_display, use_container_width=True, hide_index=True)
 
     st.divider()
     st.subheader("Form Tambah Prospek Baru")

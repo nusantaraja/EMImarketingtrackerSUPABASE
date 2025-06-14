@@ -53,15 +53,20 @@ def show_sidebar():
         st.write(f"Selamat datang, **{profile.get('full_name', 'User')}**!")
         st.write(f"Role: **{profile.get('role', 'N/A').capitalize()}**")
         st.divider()
-        pages = ["Dashboard", "Aktivitas Pemasaran"]
+
+        # Daftar halaman untuk semua pengguna
+        pages = ["Dashboard", "Aktivitas Pemasaran", "Riset Prospek"]
         if profile.get('role') == 'superadmin':
             pages.extend(["Manajemen Pengguna", "Pengaturan"])
+
         page = st.radio("Pilih Halaman:", pages)
         st.divider()
+
         if st.button("Logout"):
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.rerun()
+        
         return page
 
 def page_dashboard():
@@ -384,6 +389,98 @@ def page_settings():
             else: 
                 st.error(msg)
 
+def page_prospect_research():
+    st.title("Riset Prospek 🔍💼")
+    user = st.session_state.user
+    profile = st.session_state.profile
+
+    # Ambil semua prospek
+    if profile.get('role') == 'superadmin':
+        prospects = db.get_all_prospect_research()
+    else:
+        prospects = db.get_prospect_research_by_marketer(user.id)
+
+    st.subheader("Daftar Prospek")
+    if not prospects:
+        st.info("Belum ada data prospek.")
+        return
+
+    df = pd.DataFrame(prospects)
+    display_cols = ['company_name', 'contact_name', 'industry', 'status']
+    df_display = df[display_cols].rename(columns={
+        'company_name': 'Perusahaan', 'contact_name': 'Kontak', 'industry': 'Industri', 'status': 'Status'
+    })
+    df_display['Status'] = df_display['Status'].map(STATUS_MAPPING)
+    st.dataframe(df_display, use_container_width=True, hide_index=True)
+
+    st.divider()
+    st.subheader("Form Tambah Prospek Baru")
+    with st.form("prospect_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            company_name = st.text_input("Nama Perusahaan*")
+            website = st.text_input("Website")
+            industry = st.text_input("Industri")
+            founded_year = st.number_input("Tahun Berdiri", min_value=1900, max_value=datetime.now().year, step=1)
+            company_size = st.text_input("Jumlah Karyawan")
+            revenue = st.text_input("Pendapatan Tahunan")
+        with col2:
+            contact_name = st.text_input("Nama Kontak")
+            contact_title = st.text_input("Jabatan")
+            contact_email = st.text_input("Email")
+            linkedin_url = st.text_input("LinkedIn URL")
+            phone = st.text_input("Nomor Telepon")
+            location = st.text_input("Lokasi Kantor")
+
+        st.subheader("Detail Tambahan")
+        keywords = st.text_input("Kata Kunci (pisahkan dengan koma)")
+        technology_used = st.text_input("Teknologi Digunakan (pisahkan dengan koma)")
+        notes = st.text_area("Catatan")
+        next_step = st.text_input("Langkah Lanjutan")
+        next_step_date = st.date_input("Tanggal Follow-up")
+        status = st.selectbox("Status Prospek", ["baru", "dalam_proses", "berhasil", "gagal"])
+        source = st.text_input("Sumber Prospek", value="manual")
+
+        submitted = st.form_submit_button("Simpan Prospek")
+        if submitted:
+            if not company_name or not contact_name:
+                st.error("Nama perusahaan dan nama kontak wajib diisi!")
+            else:
+                keyword_list = [k.strip() for k in keywords.split(",")] if keywords else []
+                tech_list = [t.strip() for t in technology_used.split(",")] if technology_used else []
+
+                success, msg = db.add_prospect_research(
+                    company_name=company_name,
+                    website=website,
+                    industry=industry,
+                    founded_year=founded_year,
+                    company_size=company_size,
+                    revenue=revenue,
+                    location=location,
+                    contact_name=contact_name,
+                    contact_title=contact_title,
+                    contact_email=contact_email,
+                    linkedin_url=linkedin_url,
+                    phone=phone,
+                    keywords=keyword_list,
+                    technology_used=tech_list,
+                    notes=notes,
+                    next_step=next_step,
+                    next_step_date=next_step_date,
+                    status=status,
+                    source=source,
+                    decision_maker=False,
+                    email_status="valid",
+                    marketer_id=user.id,
+                    marketer_username=profile.get("full_name")
+                )
+
+                if success:
+                    st.success(msg)
+                    st.rerun()
+                else:
+                    st.error(msg)
+
 # --- Logika Utama Aplikasi ---
 def main():
     if "logged_in" not in st.session_state:
@@ -407,6 +504,8 @@ def main():
             page_user_management()
         elif page == "Pengaturan":
             page_settings()
+        elif page == "Riset Prospek":
+            page_prospect_research()
 
 if __name__ == "__main__":
     main()

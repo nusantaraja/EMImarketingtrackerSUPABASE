@@ -26,6 +26,7 @@ def convert_to_wib_and_format(iso_string, format_str='%A, %d %b %Y, %H:%M'):
 
 
 # --- Fungsi-fungsi Halaman (Pages) ---
+
 def show_login_page():
     st.title("EMI Marketing Tracker 💼📊")
     with st.form("login_form"):
@@ -79,7 +80,6 @@ def page_dashboard():
         return
 
     df = pd.DataFrame(activities)
-    # --- Metrik Utama ---
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Aktivitas", len(df))
     col2.metric("Total Prospek Unik", df['prospect_name'].nunique())
@@ -89,7 +89,6 @@ def page_dashboard():
     st.divider()
     st.subheader("Analisis Aktivitas Pemasaran")
 
-    # --- Baris Grafik ---
     col1, col2 = st.columns(2)
     with col1:
         status_counts = df['status'].map(STATUS_MAPPING).value_counts()
@@ -116,7 +115,6 @@ def page_dashboard():
                           color=marketer_counts.values, color_continuous_scale=px.colors.sequential.Viridis)
             st.plotly_chart(fig4, use_container_width=True)
 
-    # --- Tabel Aktivitas Terbaru ---
     st.divider()
     st.subheader("Aktivitas Terbaru")
     latest_activities = df.head(5).copy()
@@ -128,7 +126,6 @@ def page_dashboard():
     latest_activities_display['Status'] = latest_activities_display['Status'].map(STATUS_MAPPING)
     st.dataframe(latest_activities_display, use_container_width=True, hide_index=True)
 
-    # --- Tabel Jadwal Follow-up Mendatang ---
     st.divider()
     st.subheader("Jadwal Follow-up (7 Hari Mendatang)")
     all_followups = [fu for act in activities for fu in db.get_followups_by_activity_id(act['id'])]
@@ -172,12 +169,12 @@ def page_activities_management():
         df = pd.DataFrame(activities)
 
     st.subheader("Semua Catatan Aktivitas")
-    # Inisialisasi state untuk paginasi
     if 'page_num' not in st.session_state:
         st.session_state.page_num = 1
     items_per_page = 30
     total_items = len(df)
     total_pages = max(1, (total_items // items_per_page) + (1 if total_items % items_per_page > 0 else 0))
+
     start_idx = (st.session_state.page_num - 1) * items_per_page
     end_idx = start_idx + items_per_page
     paginated_df = df.iloc[start_idx:end_idx]
@@ -191,7 +188,6 @@ def page_activities_management():
         paginated_df_display['Status'] = paginated_df_display['Status'].map(STATUS_MAPPING)
         st.dataframe(paginated_df_display, use_container_width=True, hide_index=True)
 
-    st.divider()
     col_nav1, col_nav2, col_nav3 = st.columns([3, 2, 3])
     with col_nav1:
         if st.button("⬅️ PREVIOUS", disabled=(st.session_state.page_num <= 1)):
@@ -205,8 +201,8 @@ def page_activities_management():
             st.rerun()
 
     st.divider()
-    options = {act['id']: f"ID: {act['id']} - {act['prospect_name']}" for act in activities}
-    options[0] = "<< Pilih ID untuk Detail / Edit / Follow-up >>"
+    options = {act['id']: f"{act['prospect_name']} - {act['contact_person'] or 'N/A'}" for act in activities}
+    options[0] = "<< Pilih ID untuk Detail / Edit >>"
     selected_id = st.selectbox("Pilih aktivitas untuk melihat detail:", options.keys(), format_func=lambda x: options[x], index=0)
 
     if selected_id == 0:
@@ -241,7 +237,7 @@ def show_activity_form(activity):
         activity_type = st.selectbox("Jenis Aktivitas", options=ACTIVITY_TYPES, index=ACTIVITY_TYPES.index(activity['activity_type']) if activity and activity.get('activity_type') in ACTIVITY_TYPES else 0)
         status_display = st.selectbox("Status", options=list(STATUS_MAPPING.values()), index=list(STATUS_MAPPING.values()).index(STATUS_MAPPING.get(activity['status'], 'baru')) if activity else 0)
         description = st.text_area("Deskripsi", value=activity.get('description', '') if activity else "", height=150)
-        submitted = st.form_submit_button("Simpan Prospek")
+        submitted = st.form_submit_button(button_label)
         if submitted:
             if not prospect_name:
                 st.error("Nama Prospek wajib diisi!")
@@ -276,6 +272,7 @@ def show_activity_form(activity):
                         description,
                         status_key
                     )
+
                 if success:
                     st.success(msg)
                     st.rerun()
@@ -303,7 +300,7 @@ def show_followup_section(activity):
                 try:
                     fu_time_display = convert_to_wib_and_format(fu['created_at'])
                 except Exception:
-                    pass
+                    pass 
             with st.container(border=True):
                 st.markdown(f"**{fu_time_display} WIB oleh {fu['marketer_username']}**")
                 st.markdown(f"**Catatan:** {fu['notes']}")

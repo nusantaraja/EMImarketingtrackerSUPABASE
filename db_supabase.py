@@ -435,3 +435,19 @@ def add_followup(activity_id, marketer_id, marketer_username, notes, next_action
             raise Exception(response.error.message if hasattr(response, 'error') else "Unknown error")
     except Exception as e:
         return False, f"Gagal menambahkan follow-up: {e}"
+
+    def test_apollo_api_key():
+        url = "https://api.apollo.io/v1/auth/health" 
+        headers = {
+        "X-Api-Key": st.secrets["apollo"]["api_key"],
+        "Content-Type": "application/json"
+    }
+
+    try:
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            return True, "API Key valid dan aktif."
+        else:
+            return False, f"Tidak terautentikasi. Respon: {response.text}"
+    except Exception as e:
+        return False, f"Gagal uji API Key: {e}"

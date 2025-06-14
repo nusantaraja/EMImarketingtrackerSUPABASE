@@ -75,6 +75,14 @@ def page_dashboard():
 
     activities = db.get_all_marketing_activities() if profile.get('role') == 'superadmin' else db.get_marketing_activities_by_user_id(user.id)
 
+    if profile.get('role') == 'superadmin':
+        if st.button("Uji API Key Apollo.io"):
+            is_valid, msg = db.test_apollo_api_key()
+        if is_valid:
+            st.success(msg)
+        else:
+            st.error(msg)
+
     if not activities:
         st.info("Belum ada data aktivitas untuk ditampilkan.")
         df = pd.DataFrame()

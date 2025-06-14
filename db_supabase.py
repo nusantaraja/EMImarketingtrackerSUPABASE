@@ -3,20 +3,16 @@ import streamlit as st
 from datetime import datetime
 
 def sync_prospects_from_apollo(query):
-    """
-    Mengambil data prospek dari Apollo.io berdasarkan query pencarian.
-    """
     url = "https://api.apollo.io/v1/mixed_people_search" 
     headers = {
         "Content-Type": "application/json",
         "Cache-Control": "no-cache"
     }
-
     payload = {
         "api_key": st.secrets["apollo"]["api_key"],
         "query": query,
         "page": 1,
-        "page_size": 10  # Sesuaikan jumlah hasil yang diambil
+        "page_size": 10
     }
 
     try:
@@ -50,9 +46,7 @@ def sync_prospects_from_apollo(query):
                     "status": "baru",
                     "source": "Apollo.io",
                     "decision_maker": False,
-                    "email_status": "valid",
-                    "marketer_id": st.session_state.user.id,
-                    "marketer_username": st.session_state.profile.get("full_name")
+                    "email_status": "valid"
                 }
                 prospects.append(prospect_data)
 

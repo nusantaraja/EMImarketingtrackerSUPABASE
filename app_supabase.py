@@ -390,6 +390,8 @@ def page_prospect_research():
     user = st.session_state.user
     profile = st.session_state.profile
 
+
+
     st.divider()
 st.subheader("Sinkron dari Apollo.io")
 apollo_query = st.text_input("Masukkan query pencarian Apollo.io (misalnya: industry:Technology AND location:Indonesia)")
@@ -397,13 +399,19 @@ apollo_query = st.text_input("Masukkan query pencarian Apollo.io (misalnya: indu
 if st.button("Tarik Data Prospek"):
     with st.spinner("Sedang menghubungi Apollo.io..."):
         raw_prospects = db.sync_prospects_from_apollo(apollo_query)
+
         if raw_prospects:
             for p in raw_prospects:
+                # Tambahkan marketer_id dan username dari session_state
+                p["marketer_id"] = st.session_state.user.id
+                p["marketer_username"] = st.session_state.profile.get("full_name")
+
                 success, msg = db.add_prospect_research(**p)
                 if not success:
                     st.warning(f"Gagal menyimpan prospek: {msg}")
+
             st.success(f"{len(raw_prospects)} prospek berhasil ditarik dan disimpan.")
-            st.rerun()
+            st.rerun()  # Rerun untuk refresh daftar prospek
         else:
             st.info("Tidak ada prospek yang ditemukan.")
 
@@ -444,6 +452,28 @@ if st.button("Tarik Data Prospek"):
     options = {p['id']: f"{p['company_name']} - {p['contact_name']}" for p in filtered_prospects}
     options[0] = "<< Pilih ID untuk Detail / Edit >>"
     selected_id = st.selectbox("Pilih prospek:", options.keys(), format_func=lambda x: options[x], index=0)
+
+    st.divider()
+    st.subheader("Sinkron dari Apollo.io")
+    apollo_query = st.text_input("Masukkan query pencarian (misal: industry:Technology AND location:Indonesia)")
+
+if st.button("Tarik Data Prospek"):
+    with st.spinner("Sedang menghubungi Apollo.io..."):
+        raw_prospects = db.sync_prospects_from_apollo(apollo_query)
+        if raw_prospects:
+            saved_count = 0
+            for p in raw_prospects:
+                p["marketer_id"] = st.session_state.user.id
+                p["marketer_username"] = st.session_state.profile.get("full_name")
+
+                success, msg = db.add_prospect_research(**p)
+                if success:
+                    saved_count += 1
+
+            st.success(f"{saved_count} prospek berhasil disimpan dari Apollo.io")
+            st.rerun()
+        else:
+            st.info("Tidak ada prospek baru yang ditemukan.")
 
     # --- Form Edit atau Tambah Baru ---
     if selected_id == 0:

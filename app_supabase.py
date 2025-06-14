@@ -390,6 +390,23 @@ def page_prospect_research():
     user = st.session_state.user
     profile = st.session_state.profile
 
+    st.divider()
+st.subheader("Sinkron dari Apollo.io")
+apollo_query = st.text_input("Masukkan query pencarian Apollo.io (misalnya: industry:Technology AND location:Indonesia)")
+
+if st.button("Tarik Data Prospek"):
+    with st.spinner("Sedang menghubungi Apollo.io..."):
+        raw_prospects = db.sync_prospects_from_apollo(apollo_query)
+        if raw_prospects:
+            for p in raw_prospects:
+                success, msg = db.add_prospect_research(**p)
+                if not success:
+                    st.warning(f"Gagal menyimpan prospek: {msg}")
+            st.success(f"{len(raw_prospects)} prospek berhasil ditarik dan disimpan.")
+            st.rerun()
+        else:
+            st.info("Tidak ada prospek yang ditemukan.")
+
     # Ambil semua prospek
     if profile.get('role') == 'superadmin':
         prospects = db.get_all_prospect_research()

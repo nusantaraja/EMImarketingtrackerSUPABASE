@@ -1,6 +1,68 @@
+import requests
 import streamlit as st
-from supabase import create_client, Client
 from datetime import datetime
+
+def sync_prospects_from_apollo(query):
+    """
+    Mengambil data prospek dari Apollo.io berdasarkan query pencarian.
+    """
+    url = "https://api.apollo.io/v1/mixed_people_search" 
+    headers = {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-cache"
+    }
+
+    payload = {
+        "api_key": st.secrets["apollo"]["api_key"],
+        "query": query,
+        "page": 1,
+        "page_size": 10  # Sesuaikan jumlah hasil yang diambil
+    }
+
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        if response.status_code == 200:
+            people = response.json().get("people", [])
+            prospects = []
+
+            for person in people:
+                org = person.get("organization", {})
+                contact = person.get("contact", {})
+
+                prospect_data = {
+                    "company_name": org.get("name"),
+                    "website": org.get("website_url"),
+                    "industry": org.get("industry_tag"),
+                    "founded_year": org.get("founded_year"),
+                    "company_size": org.get("employee_count"),
+                    "revenue": org.get("annual_revenue"),
+                    "location": person.get("location"),
+                    "contact_name": contact.get("full_name"),
+                    "contact_title": contact.get("title"),
+                    "contact_email": contact.get("email"),
+                    "linkedin_url": contact.get("linkedin_url"),
+                    "phone": contact.get("phone_number"),
+                    "keywords": org.get("tags", []),
+                    "technology_used": org.get("technologies", []),
+                    "notes": "",
+                    "next_step": "Cold Email",
+                    "next_step_date": None,
+                    "status": "baru",
+                    "source": "Apollo.io",
+                    "decision_maker": False,
+                    "email_status": "valid",
+                    "marketer_id": st.session_state.user.id,
+                    "marketer_username": st.session_state.profile.get("full_name")
+                }
+                prospects.append(prospect_data)
+
+            return prospects
+        else:
+            st.error(f"Gagal mengambil data dari Apollo.io: {response.text}")
+            return []
+    except Exception as e:
+        st.error(f"Error saat sinkron dari Apollo.io: {e}")
+        return []
 
 # --- Inisialisasi Koneksi ---
 @st.cache_resource
@@ -264,7 +326,6 @@ def get_prospect_by_id(prospect_id):
 
 
 def add_prospect_research(**kwargs):
-    """Menyimpan prospek baru ke Supabase."""
     supabase = init_connection()
     try:
         data_to_insert = {
@@ -370,3 +431,4 @@ def update_app_config(new_config):
         return True, "Konfigurasi berhasil diperbarui."
     except Exception as e:
         return False, f"Error: {e}"
+

@@ -25,7 +25,8 @@ def convert_to_wib_and_format(iso_string, format_str='%A, %d %b %Y, %H:%M'):
         return iso_string
 
 
-# --- Fungsi-fungsi Halaman (Pages) ---
+# --- Fungsi-fungsi Halaman ---
+
 def show_login_page():
     st.title("EMI Marketing Tracker 💼📊")
     with st.form("login_form"):
@@ -52,7 +53,6 @@ def show_sidebar():
         st.write(f"Role: **{profile.get('role', 'N/A').capitalize()}**")
         st.divider()
 
-        # Daftar halaman utama
         pages = ["Dashboard", "Aktivitas Pemasaran", "Riset Prospek"]
         if profile.get('role') == 'superadmin':
             pages.extend(["Manajemen Pengguna", "Pengaturan"])
@@ -72,6 +72,7 @@ def page_dashboard():
     st.title(f"Dashboard {st.session_state.profile.get('role', '').capitalize()}")
     user = st.session_state.user
     profile = st.session_state.profile
+
     activities = db.get_all_marketing_activities() if profile.get('role') == 'superadmin' else db.get_marketing_activities_by_user_id(user.id)
 
     if not activities:
@@ -143,9 +144,7 @@ def page_dashboard():
             (followups_df['next_followup_date'] <= next_7_days)
         ].sort_values(by='next_followup_date')
 
-        if upcoming_df.empty:
-            st.info("Tidak ada jadwal follow-up dalam 7 hari ke depan.")
-        else:
+        if not upcoming_df.empty:
             display_cols_fu = ['next_followup_date', 'prospect_name', 'marketer_username', 'next_action']
             upcoming_display_df = upcoming_df[display_cols_fu].rename(columns={
                 'next_followup_date': 'Tanggal', 'prospect_name': 'Prospek',
@@ -153,6 +152,8 @@ def page_dashboard():
             })
             upcoming_display_df['Tanggal'] = upcoming_display_df['Tanggal'].dt.tz_convert(wib_tz).dt.strftime('%A, %d %b %Y')
             st.dataframe(upcoming_display_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("Tidak ada jadwal follow-up dalam 7 hari ke depan.")
 
 
 def page_activities_management():
@@ -187,7 +188,6 @@ def page_activities_management():
         paginated_df_display['Status'] = paginated_df_display['Status'].map(STATUS_MAPPING)
         st.dataframe(paginated_df_display, use_container_width=True, hide_index=True)
 
-    st.divider()
     col_nav1, col_nav2, col_nav3 = st.columns([3, 2, 3])
     with col_nav1:
         if st.button("⬅️ PREVIOUS", disabled=(st.session_state.page_num <= 1)):
@@ -305,7 +305,6 @@ def show_followup_section(activity):
                 st.markdown(f"**{fu_time_display} WIB oleh {fu['marketer_username']}**")
                 st.markdown(f"**Catatan:** {fu['notes']}")
                 st.caption(f"Tindak Lanjut: {fu.get('next_action', 'N/A')} | Jadwal: {fu.get('next_followup_date', 'N/A')} | Minat: {fu.get('interest_level', 'N/A')}")
-
     else:
         st.caption("Belum ada follow-up untuk aktivitas ini.")
 
@@ -390,31 +389,6 @@ def page_prospect_research():
     user = st.session_state.user
     profile = st.session_state.profile
 
-
-
-    st.divider()
-st.subheader("Sinkron dari Apollo.io")
-apollo_query = st.text_input("Masukkan query pencarian Apollo.io (misalnya: industry:Technology AND location:Indonesia)")
-
-if st.button("Tarik Data Prospek"):
-    with st.spinner("Sedang menghubungi Apollo.io..."):
-        raw_prospects = db.sync_prospects_from_apollo(apollo_query)
-
-        if raw_prospects:
-            for p in raw_prospects:
-                # Tambahkan marketer_id dan username dari session_state
-                p["marketer_id"] = st.session_state.user.id
-                p["marketer_username"] = st.session_state.profile.get("full_name")
-
-                success, msg = db.add_prospect_research(**p)
-                if not success:
-                    st.warning(f"Gagal menyimpan prospek: {msg}")
-
-            st.success(f"{len(raw_prospects)} prospek berhasil ditarik dan disimpan.")
-            st.rerun()  # Rerun untuk refresh daftar prospek
-        else:
-            st.info("Tidak ada prospek yang ditemukan.")
-
     # Ambil semua prospek
     if profile.get('role') == 'superadmin':
         prospects = db.get_all_prospect_research()
@@ -452,28 +426,6 @@ if st.button("Tarik Data Prospek"):
     options = {p['id']: f"{p['company_name']} - {p['contact_name']}" for p in filtered_prospects}
     options[0] = "<< Pilih ID untuk Detail / Edit >>"
     selected_id = st.selectbox("Pilih prospek:", options.keys(), format_func=lambda x: options[x], index=0)
-
-    st.divider()
-    st.subheader("Sinkron dari Apollo.io")
-    apollo_query = st.text_input("Masukkan query pencarian (misal: industry:Technology AND location:Indonesia)")
-
-if st.button("Tarik Data Prospek"):
-    with st.spinner("Sedang menghubungi Apollo.io..."):
-        raw_prospects = db.sync_prospects_from_apollo(apollo_query)
-        if raw_prospects:
-            saved_count = 0
-            for p in raw_prospects:
-                p["marketer_id"] = st.session_state.user.id
-                p["marketer_username"] = st.session_state.profile.get("full_name")
-
-                success, msg = db.add_prospect_research(**p)
-                if success:
-                    saved_count += 1
-
-            st.success(f"{saved_count} prospek berhasil disimpan dari Apollo.io")
-            st.rerun()
-        else:
-            st.info("Tidak ada prospek baru yang ditemukan.")
 
     # --- Form Edit atau Tambah Baru ---
     if selected_id == 0:
@@ -612,6 +564,24 @@ if st.button("Tarik Data Prospek"):
                             st.rerun()
                         else:
                             st.error(msg)
+
+    # --- Sinkron dari Apollo.io ---
+    st.divider()
+    st.subheader("Sinkron dari Apollo.io")
+    apollo_query = st.text_input("Masukkan query pencarian (misal: industry:Technology AND location:Jakarta)")
+    if st.button("Tarik Data dari Apollo.io"):
+        with st.spinner("Menarik data dari Apollo.io..."):
+            raw_prospects = db.sync_prospect_from_apollo(apollo_query)
+            if raw_prospects:
+                saved_count = 0
+                for p in raw_prospects:
+                    success, msg = db.add_prospect_research(**p)
+                    if success:
+                        saved_count += 1
+                st.success(f"{saved_count} prospek berhasil ditarik dan disimpan.")
+                st.rerun()
+            else:
+                st.info("Tidak ada prospek yang ditemukan.")
 
 
 # --- Logika Utama Aplikasi ---

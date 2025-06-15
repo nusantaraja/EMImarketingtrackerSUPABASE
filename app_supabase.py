@@ -4,7 +4,7 @@ import plotly.express as px
 from datetime import datetime, date
 import db_supabase as db
 import pytz
-from streamlit_quill import st_quill  # Editor Visual
+#from streamlit_quill import st_quill  # Editor Visual
 import requests
 from urllib.parse import urlencode
 
@@ -721,8 +721,10 @@ def page_prospect_research():
 
             html_template = generate_html_email_template(prospect, role=contact_title, industry=prospect_industry, follow_up_number=followup_count + 1)
 
-            edited_html = st_quill(value=html_template, html=True, key="quill_email_editor")
-
+            edited_html = st.text_area("Edit Template Email", value=html_template, height=400, key="email_template_editor")
+    
+        if st.button("Preview Email"):
+            st.markdown(edited_html, unsafe_allow_html=True)    
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("Preview Email"):

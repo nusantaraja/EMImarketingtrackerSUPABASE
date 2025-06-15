@@ -11,11 +11,12 @@ def init_connection():
         key = st.secrets["supabase"]["key"]
         return create_client(url, key)
     except Exception as e:
-        st.error("Gagal terhubung ke Supabase. Pastikan secrets sudah benar.")
+        st.error(f"Gagal terhubung ke Supabase: {e}")
         st.stop()
         return None
 
 
+# --- Fungsi Autentikasi ---
 def sign_in(email, password):
     supabase = init_connection()
     try:
@@ -33,12 +34,7 @@ def sign_up(email, password, full_name, role):
         user = response.user
 
         if user:
-            profile_data = {
-                "id": user.id,
-                "full_name": full_name,
-                "role": role,
-                "email": email
-            }
+            profile_data = {"id": user.id, "full_name": full_name, "role": role, "email": email}
             supabase.from_("profiles").insert(profile_data).execute()
 
         return user, None
@@ -56,6 +52,7 @@ def get_profile(user_id):
         return None
 
 
+# --- Manajemen Pengguna (Superadmin Only) ---
 def get_all_profiles():
     supabase = init_connection()
     try:
@@ -66,6 +63,11 @@ def get_all_profiles():
         return []
 
 
+def delete_user_by_id(user_id):
+    return False, "Fitur Hapus Pengguna sedang dalam pengembangan"
+
+
+# --- Marketing Activities CRUD ---
 def get_all_marketing_activities():
     supabase = init_connection()
     try:
@@ -115,10 +117,7 @@ def add_marketing_activity(marketer_id, marketer_username, prospect_name, prospe
         }
 
         response = supabase.from_("marketing_activities").insert(data_to_insert).execute()
-        if response.data:
-            return True, "Aktivitas berhasil ditambahkan!", response.data[0]["id"]
-        else:
-            raise Exception(response.error.message if hasattr(response, 'error') and response.error else "Unknown error")
+        return True, "Aktivitas berhasil ditambahkan!", response.data[0]["id"]
     except Exception as e:
         return False, f"Gagal menambahkan aktivitas: {e}", None
 
@@ -154,7 +153,7 @@ def delete_marketing_activity(activity_id):
     except Exception as e:
         return False, f"Gagal menghapus aktivitas: {e}"
 
-
+# --- Follow-up CRUD ---
 def get_followups_by_activity_id(activity_id):
     supabase = init_connection()
     try:
@@ -168,10 +167,10 @@ def get_followups_by_activity_id(activity_id):
 def add_followup(activity_id, marketer_id, marketer_username, notes, next_action, next_followup_date, interest_level, status_update):
     supabase = init_connection()
     try:
-        # Update status aktivitas utama
+        # Update status utama
         supabase.from_("marketing_activities").update({"status": status_update}).eq("id", activity_id).execute()
 
-        # Format tanggal follow-up
+        # Format tanggal
         next_followup_date_str = next_followup_date.strftime("%Y-%m-%d") if next_followup_date else None
 
         data_to_insert = {
@@ -190,6 +189,8 @@ def add_followup(activity_id, marketer_id, marketer_username, notes, next_action
         return False, f"Gagal menambahkan follow-up: {e}"
 
 
+# --- Riset Prospek CRUD ---
+# --- Riset Prospek CRUD ---
 def get_all_prospect_research():
     supabase = init_connection()
     try:
@@ -396,8 +397,65 @@ def save_email_template_to_prospect(prospect_id, template_html):
         return False, f"Gagal menyimpan template: {e}"
 
 
+# --- Fungsi Kirim Email via Zoho Mail ---
+# --- Fungsi Kirim Email via Zoho Mail ---
+def exchange_code_for_tokens(code):
+    url = "https://accounts.zoho.com/oauth/v2/token" 
+    payload = {
+        "code": code,
+        "client_id": st.secrets["zoho"]["client_id"],
+        "client_secret": st.secrets["zoho"]["client_secret"],
+        "grant_type": "authorization_code",
+        "redirect_uri": st.secrets["zoho"].get("redirect_uri", "https://emimtsupabase.streamlit.app/") 
+    }
+
+    try:
+        response = requests.post(url, data=payload)
+        if response.status_code == 200:
+            tokens = response.json()
+            st.secrets["zoho"]["access_token"] = tokens.get("access_token", "")
+            if "refresh_token" in tokens:
+                st.secrets["zoho"]["refresh_token"] = tokens.get("refresh_token", "")
+
+            # Simpan secrets.toml ulang
+            with open(".streamlit/secrets.toml", "w") as f:
+                toml.dump(st.secrets._file, f)
+
+            return True, "Token berhasil digenerate!"
+        else:
+            return False, f"Gagal mendapatkan token: {response.text}"
+    except Exception as e:
+        return False, f"Error: {e}"
+
+def refresh_zoho_token():
+    url = "https://accounts.zoho.com/oauth/v2/token" 
+    payload = {
+        "grant_type": "refresh_token",
+        "client_id": st.secrets["zoho"]["client_id"],
+        "client_secret": st.secrets["zoho"]["client_secret"],
+        "refresh_token": st.secrets["zoho"].get("refresh_token", "")
+    }
+
+    try:
+        response = requests.post(url, data=payload)
+        if response.status_code == 200:
+            tokens = response.json()
+            st.secrets["zoho"]["access_token"] = tokens.get("access_token", "")
+            if "refresh_token" in tokens:
+                st.secrets["zoho"]["refresh_token"] = tokens.get("refresh_token", "")
+
+            # Simpan secrets.toml ulang
+            with open(".streamlit/secrets.toml", "w") as f:
+                toml.dump(st.secrets._file, f)
+
+            return True, "Token berhasil diperbarui!"
+        else:
+            return False, f"Gagal memperbarui token: {response.text}"
+    except Exception as e:
+        return False, f"Error saat refresh token: {e}"
+
+
 def send_email_via_zoho(email_data):
-    url = "https://mail.zoho.com/api/v1/messages" 
     headers = {
         "Authorization": f"Zoho-oauthtoken {st.secrets['zoho']['access_token']}",
         "Content-Type": "application/json"
@@ -411,7 +469,7 @@ def send_email_via_zoho(email_data):
     }
 
     try:
-        response = requests.post(url, json=payload, headers=headers)
+        response = requests.post("https://mail.zoho.com/api/v1/messages",  json=payload, headers=headers)
         if response.status_code in [200, 202]:
             return True, "Email berhasil dikirim!"
         else:

@@ -1,8 +1,9 @@
-streamlit==1.24.0
-supabase==0.2.0
-pandas==2.0.3
-plotly==5.23.0
-pytz==2023.3
+streamlit==1.45.1
+pandas==2.3.0
+plotly==6.1.2
+supabase==2.15.3
+pytz==2025.2
 requests==2.31.0
 toml==0.10.2
 streamlit-quill==0.2.1
+rich==14.0.0

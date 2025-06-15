@@ -547,9 +547,21 @@ def page_prospect_research():
         return
 
     df = pd.DataFrame(filtered_prospects)
+    # Pastikan kolom 'status' tersedia sebelum dipakai
+if 'status' in df.columns:
     display_cols = ['company_name', 'contact_name', 'industry', 'status']
-    df_display = df[display_cols].rename(columns={'company_name': 'Perusahaan', 'contact_name': 'Kontak', 'industry': 'Industri', 'status': 'Status'})
-    df_display['Status'] = df_display['status'].map(STATUS_MAPPING)
+    df_display = df[display_cols].rename(
+        columns={
+            'company_name': 'Perusahaan',
+            'contact_name': 'Kontak',
+            'industry': 'Industri',
+            'status': 'Status'
+        }
+    )
+    df_display['Status'] = df_display['Status'].map(STATUS_MAPPING).fillna("Tidak Diketahui")
+else:
+    st.error("Kolom 'status' tidak ditemukan dalam data prospek.")
+    st.stop()
     st.dataframe(df_display, use_container_width=True, hide_index=True)
 
     st.divider()

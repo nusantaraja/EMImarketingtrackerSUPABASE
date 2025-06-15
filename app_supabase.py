@@ -1,19 +1,25 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from datetime import datetime
+from datetime import datetime, date
 import db_supabase as db
 import pytz
+from streamlit_quill import st_quill  # Editor Visual
+import requests
+from urllib.parse import urlencode
 
-# --- Konfigurasi Halaman & Variabel Global ---
+
+# --- Konfigurasi Halaman ---
 st.set_page_config(page_title="EMI Marketing Tracker", page_icon="💼", layout="wide")
+
+# --- Mapping Status ---
 STATUS_MAPPING = {'baru': 'Baru', 'dalam_proses': 'Dalam Proses', 'berhasil': 'Berhasil', 'gagal': 'Gagal'}
 REVERSE_STATUS_MAPPING = {v: k for k, v in STATUS_MAPPING.items()}
 ACTIVITY_TYPES = ["Presentasi", "Demo Produk", "Follow-up Call", "Email", "Meeting", "Lainnya"]
 
-# --- Fungsi Helper untuk Waktu ---
+# --- Helper Fungsi Waktu & Tanggal ---
 def convert_to_wib_and_format(iso_string, format_str='%A, %d %b %Y, %H:%M'):
-    """Mengkonversi string ISO 8601 dari Supabase ke WIB dan memformatnya."""
+    """Konversi waktu UTC ke WIB"""
     if not iso_string:
         return "N/A"
     try:
@@ -21,12 +27,156 @@ def convert_to_wib_and_format(iso_string, format_str='%A, %d %b %Y, %H:%M'):
         wib_tz = pytz.timezone("Asia/Jakarta")
         dt_wib = dt_utc.astimezone(wib_tz)
         return dt_wib.strftime(format_str)
-    except (ValueError, TypeError):
+    except Exception:
         return iso_string
 
 
-# --- Fungsi-fungsi Halaman ---
+def date_to_str(dt):
+    """Ubah date ke string"""
+    return dt.strftime("%Y-%m-%d") if isinstance(dt, date) else dt
 
+
+def str_to_date(s):
+    """Ubah string ke date object"""
+    return datetime.strptime(s, "%Y-%m-%d").date() if s else None
+
+
+# --- Helper Template Email ---
+def generate_html_email_template(prospect, role=None, industry=None, follow_up_number=None):
+    contact_name = prospect.get("contact_name", "Bapak/Ibu")
+    company_name = prospect.get("company_name", "Perusahaan")
+    location = prospect.get("location", "Lokasi")
+    next_step = prospect.get("next_step", "baru")
+
+    default_template = f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+    <h2 style="color: #1f77b4;">Penawaran Solusi untuk {company_name}</h2>
+    
+    <p>Halo <strong>{contact_name}</strong>,</p>
+
+    <p>Kami melihat bahwa perusahaan Anda, <strong>{company_name}</strong>, sedang dalam tahap <em>{next_step}</em>. Kami menawarkan solusi yang mungkin cocok untuk bisnis Anda.</p>
+
+    <p>Jika tertarik, silakan hubungi kami via {prospect.get('phone', st.session_state.profile.get('email'))}.</p>
+
+    <br>
+    <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
+    <em>{st.session_state.profile.get("role", "")}</em></p>
+
+    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
+    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
+</div>"""
+
+    # --- Template berbasis role ---
+    if role:
+        role = role.lower()
+        if "ceo" in role or "founder" in role:
+            return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+    <h2 style="color: #1f77b4;">Solusi Strategis untuk {company_name} (CEO)</h2>
+    <p>Halo <strong>{contact_name}</strong>,</p>
+    <p>Saya melihat bahwa perusahaan Anda, <strong>{company_name}</strong>, saat ini sedang dalam tahap <em>{next_step}</em>. Sebagai pemimpin bisnis, apakah Anda tertarik dengan penawaran yang bisa meningkatkan efisiensi dan skalabilitas perusahaan?</p>
+    <br>
+    <p><strong>{st.session_state.profile.get("full_name", "Tim EMI")}</strong><br>
+    <em>{st.session_state.profile.get("role", "")}</em></p>
+    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
+    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
+</div>""".strip()
+
+        elif "cfo" in role or "finance" in role:
+            return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+    <h2 style="color: #ff7f0e;">Efisiensi Biaya untuk {company_name} (CFO)</h2>
+    <p>Halo <strong>{contact_name}</strong>,</p>
+    <p>Berdasarkan data, <strong>{company_name}</strong> berada di industri finansial. Kami memiliki solusi untuk meningkatkan efisiensi biaya operasional Anda.</p>
+    <br>
+    <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
+    <em>{st.session_state.profile.get("role", "")}</em></p>
+    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
+    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
+</div>""".strip()
+
+        elif "it" in role or "tech" in role or "engineer" in role:
+            return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+    <h2 style="color: #17becf;">Teknologi Informasi untuk {company_name}</h2>
+    <p>Halo <strong>{contact_name}</strong>,</p>
+    <p>Berdasarkan riset kami, <strong>{company_name}</strong> menggunakan teknologi {', '.join(prospect.get("technology_used", ["Tidak ada"]))}. Kami menawarkan integrasi sistem yang bisa langsung digunakan oleh tim IT Anda.</p>
+    <p>Jika tertarik, silakan balas email ini atau kontak saya via {prospect.get('phone', '')}.</p>
+    <br>
+    <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
+    <em>{st.session_state.profile.get("role", "")}</em></p>
+    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
+    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
+</div>""".strip()
+
+    # --- Template berbasis industri ---
+    if industry:
+        industry = industry.lower()
+        if "teknologi" in industry or "tech" in industry:
+            return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+    <h2 style="color: #17becf;">Teknologi Informasi untuk {company_name}</h2>
+    <p>Halo <strong>{contact_name}</strong>,</p>
+    <p>Kami percaya bahwa solusi IT kami sangat cocok untuk perusahaan Anda di industri teknologi informasi.</p>
+    <p>Jika tertarik, silakan balas email ini atau kontak saya via {prospect.get('phone', '')}.</p>
+    <br>
+    <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
+    <em>{st.session_state.profile.get("role", "")}</em></p>
+    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
+    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
+</div>""".strip()
+
+        elif "kesehatan" in industry or "hospital" in industry:
+            return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+    <h2 style="color: #2ca02c;">Solusi Digital untuk Rumah Sakit/Klinik</h2>
+    <p>Halo <strong>{contact_name}</strong>,</p>
+    <p>Kami menemukan bahwa <strong>{company_name}</strong> berada di industri kesehatan. Kami punya solusi digital untuk meningkatkan efisiensi operasional rumah sakit/klinik Anda.</p>
+    <p>Silakan balas email ini untuk diskusi lebih lanjut.</p>
+    <br>
+    <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
+    <em>{st.session_state.profile.get("role", "")}</em></p>
+    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
+    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
+</div>""".strip()
+
+    # --- Template berbasis frekuensi follow-up ---
+    if follow_up_number == 1:
+        return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+    <h2 style="color: #1f77b4;">Follow-up 1 - Halo {contact_name}, Ini Penawaran dari EMI</h2>
+    <p>Saya menemukan data perusahaan Anda saat riset di industri {industry}. Kami percaya bahwa solusi kami sangat cocok untuk bisnis seperti {company_name}.</p>
+    <p>Apakah Anda tertarik untuk diskusi singkat?</p>
+    <br>
+    <p><strong>{st.session_state.profile.get("full_name", "Tim EMI")}</strong><br>
+    <em>{st.session_state.profile.get("role", "")}</em></p>
+    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
+    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
+</div>""".strip()
+
+    elif follow_up_number == 2:
+        return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+    <h2 style="color: #17becf;">Follow-up 2 - Update Tambahan untuk {company_name}</h2>
+    <p>Halo <strong>{contact_name}</strong>,</p>
+    <p>Sebelumnya, kita sudah sempat komunikasi mengenai solusi digital untuk {company_name}. Sekarang, saya ingin memberikan info tambahan yang mungkin bisa membantu pengambilan keputusan Anda.</p>
+    <p>Jika ada pertanyaan atau butuh info lebih lanjut, jangan ragu untuk balas email ini.</p>
+    <br>
+    <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
+    <em>{st.session_state.profile.get("role", "")}</em></p>
+    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
+    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
+</div>""".strip()
+
+    elif follow_up_number >= 3:
+        return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+    <h2 style="color: #d62728;">Follow-up 3 - Penawaran Terakhir</h2>
+    <p>Halo <strong>{contact_name}</strong>,</p>
+    <p>Kami belum mendapat respons terkait penawaran sebelumnya. Apakah masih tertarik dengan solusi untuk {company_name}? Kami bisa bantu Anda meningkatkan efisiensi dan skalabilitas bisnis Anda.</p>
+    <p>Silakan balas email ini atau kontak saya via {prospect.get('phone', st.session_state.profile.get('email'))}.</p>
+    <br>
+    <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
+    <em>{st.session_state.profile.get("role", "")}</em></p>
+    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
+    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
+</div>""".strip()
+
+    return default_template.strip()
+
+
+# --- Halaman Login ---
 def show_login_page():
     st.title("EMI Marketing Tracker 💼📊")
     with st.form("login_form"):
@@ -45,6 +195,7 @@ def show_login_page():
                 st.error(f"Login Gagal: {error}")
 
 
+# --- Sidebar Menu ---
 def show_sidebar():
     with st.sidebar:
         profile = st.session_state.profile
@@ -68,6 +219,7 @@ def show_sidebar():
         return page
 
 
+# --- Dashboard ---
 def page_dashboard():
     st.title(f"Dashboard {st.session_state.profile.get('role', '').capitalize()}")
     user = st.session_state.user
@@ -95,10 +247,12 @@ def page_dashboard():
         fig = px.pie(status_counts, values=status_counts.values, names=status_counts.index,
                      title="Distribusi Status Prospek", color_discrete_sequence=px.colors.sequential.RdBu)
         st.plotly_chart(fig, use_container_width=True)
+
     with col2:
         type_counts = df['activity_type'].value_counts()
         fig2 = px.bar(type_counts, x=type_counts.index, y=type_counts.values,
-                      title="Distribusi Jenis Aktivitas", labels={'x': 'Jenis Aktivitas', 'y': 'Jumlah'})
+                      title="Distribusi Jenis Aktivitas", labels={'x': 'Jenis Aktivitas', 'y': 'Jumlah'},
+                      color_continuous_scale=px.colors.sequential.Viridis)
         st.plotly_chart(fig2, use_container_width=True)
 
     if profile.get('role') == 'superadmin':
@@ -107,13 +261,14 @@ def page_dashboard():
             location_counts = df['prospect_location'].str.strip().str.title().value_counts().nlargest(10)
             fig3 = px.bar(location_counts, x=location_counts.index, y=location_counts.values,
                           title="Top 10 Lokasi Prospek", labels={'x': 'Kota/Lokasi', 'y': 'Jumlah Prospek'},
-                          color_continuous_scale=px.colors.sequential.Viridis, use_container_width=True)
-            st.plotly_chart(fig3)
+                          color_continuous_scale=px.colors.sequential.Viridis, height=300)
+            st.plotly_chart(fig3, use_container_width=True)
+
         with col4:
             marketer_counts = df['marketer_username'].value_counts()
             fig4 = px.bar(marketer_counts, x=marketer_counts.index, y=marketer_counts.values,
                           title="Aktivitas per Marketing", labels={'x': 'Nama Marketing', 'y': 'Jumlah Aktivitas'},
-                          color=marketer_counts.values, color_continuous_scale=px.colors.sequential.Viridis)
+                          color=marketer_counts.values, color_continuous_scale=px.colors.sequential.Viridis, height=300)
             st.plotly_chart(fig4, use_container_width=True)
 
     st.divider()
@@ -130,6 +285,7 @@ def page_dashboard():
     st.divider()
     st.subheader("Jadwal Follow-up (7 Hari Mendatang)")
     all_followups = [fu for act in activities for fu in db.get_followups_by_activity_id(act['id'])]
+
     if not all_followups:
         st.info("Tidak ada jadwal follow-up yang ditemukan.")
     else:
@@ -151,7 +307,7 @@ def page_dashboard():
                 'next_followup_date': 'Tanggal', 'prospect_name': 'Prospek',
                 'marketer_username': 'Marketing', 'next_action': 'Tindakan'
             })
-            upcoming_display_df['Tanggal'] = upcoming_display_df['Tanggal'].dt.tz_convert(wib_tz).dt.strftime('%A, %d %b %Y')
+            upcoming_display_df['Tanggal'] = upcoming_display_df['next_followup_date'].dt.tz_convert(wib_tz).dt.strftime('%A, %d %b %Y')
             st.dataframe(upcoming_display_df, use_container_width=True, hide_index=True)
         else:
             st.info("Tidak ada jadwal follow-up dalam 7 hari ke depan.")
@@ -180,6 +336,7 @@ def page_dashboard():
         st.warning("Fitur ini hanya tersedia untuk superadmin.")
 
 
+# --- Manajemen Aktivitas Pemasaran ---
 def page_activities_management():
     st.title("Manajemen Aktivitas Pemasaran")
     profile = st.session_state.profile
@@ -218,14 +375,14 @@ def page_activities_management():
             st.session_state.page_num -= 1
             st.rerun()
     with col_nav2:
-        st.write(f"<div style='text-align: center; margin-top: 5px;'>Halaman <b>{st.session_state.page_num}</b> dari <b>{total_pages}</b></div>", unsafe_allow_html=True)
+        st.write(f"<div style='text-align: center;'>Halaman <b>{st.session_state.page_num}</b> dari <b>{total_pages}</b></div>", unsafe_allow_html=True)
     with col_nav3:
         if st.button("NEXT ➡️", disabled=(st.session_state.page_num >= total_pages)):
             st.session_state.page_num += 1
             st.rerun()
 
     st.divider()
-    options = {act['id']: f"{act['prospect_name']} - {act['contact_person'] or 'N/A'}" for act in activities}
+    options = {act['id']: f"{act['prospect_name']} - {act.get('contact_person', 'N/A')}" for act in activities}
     options[0] = "<< Pilih ID untuk Detail / Edit >>"
     selected_id = st.selectbox("Pilih aktivitas untuk melihat detail:", options.keys(), format_func=lambda x: options[x], index=0)
 
@@ -256,14 +413,17 @@ def show_activity_form(activity):
         with col2:
             prospect_location = st.text_input("Lokasi Prospek", value=activity.get('prospect_location', '') if activity else "")
             contact_email = st.text_input("Email Kontak", value=activity.get('contact_email', '') if activity else "")
-            default_date = datetime.strptime(activity['activity_date'], '%Y-%m-%d') if activity and activity.get('activity_date') else datetime.today()
+            default_date = str_to_date(activity['activity_date']) if activity and activity.get('activity_date') else date.today()
             activity_date = st.date_input("Tanggal Aktivitas", value=default_date)
-        activity_type = st.selectbox("Jenis Aktivitas", options=ACTIVITY_TYPES, index=ACTIVITY_TYPES.index(activity['activity_type']) if activity and activity.get('activity_type') in ACTIVITY_TYPES else 0)
-        status_display = st.selectbox("Status", options=list(STATUS_MAPPING.values()), index=list(STATUS_MAPPING.values()).index(STATUS_MAPPING.get(activity['status'], 'baru')) if activity else 0)
+
+        activity_type = st.selectbox("Jenis Aktivitas", options=ACTIVITY_TYPES,
+                                     index=ACTIVITY_TYPES.index(activity['activity_type']) if activity and activity.get('activity_type') in ACTIVITY_TYPES else 0)
+        status_display = st.selectbox("Status", options=list(STATUS_MAPPING.values()),
+                                      index=list(STATUS_MAPPING.values()).index(STATUS_MAPPING.get(activity['status'], 'baru')) if activity else 0)
         description = st.text_area("Deskripsi", value=activity.get('description', '') if activity else "", height=150)
         submitted = st.form_submit_button(button_label)
         if submitted:
-            if not prospect_name or not contact_person:
+            if not prospect_name:
                 st.error("Nama Prospek wajib diisi!")
             else:
                 status_key = REVERSE_STATUS_MAPPING[status_display]
@@ -276,7 +436,7 @@ def show_activity_form(activity):
                         contact_position,
                         contact_phone,
                         contact_email,
-                        activity_date.strftime("%Y-%m-%d") if isinstance(activity_date, datetime.date) else "",
+                        date_to_str(activity_date),
                         activity_type,
                         description,
                         status_key
@@ -291,7 +451,7 @@ def show_activity_form(activity):
                         contact_position,
                         contact_phone,
                         contact_email,
-                        activity_date.strftime("%Y-%m-%d") if isinstance(activity_date, datetime.date) else "",
+                        date_to_str(activity_date),
                         activity_type,
                         description,
                         status_key
@@ -329,8 +489,6 @@ def show_followup_section(activity):
                 st.markdown(f"**{fu_time_display} WIB oleh {fu['marketer_username']}**")
                 st.markdown(f"**Catatan:** {fu['notes']}")
                 st.caption(f"Tindak Lanjut: {fu.get('next_action', 'N/A')} | Jadwal: {fu.get('next_followup_date', 'N/A')} | Minat: {fu.get('interest_level', 'N/A')}")
-    else:
-        st.caption("Belum ada follow-up untuk aktivitas ini.")
 
     with st.form("new_followup_form"):
         st.write("**Tambah Follow-up Baru**")
@@ -352,7 +510,7 @@ def show_followup_section(activity):
                     st.session_state.profile.get('full_name', 'N/A'),
                     notes,
                     next_action,
-                    next_followup_date.strftime("%Y-%m-%d") if next_followup_date else None,
+                    next_followup_date,
                     interest_level,
                     new_status_key
                 )
@@ -363,54 +521,7 @@ def show_followup_section(activity):
                     st.error(msg)
 
 
-def page_user_management():
-    st.title("Manajemen Pengguna")
-    tab1, tab2 = st.tabs(["Daftar Pengguna", "Tambah Pengguna Baru"])
-    with tab1:
-        st.subheader("Daftar Pengguna Terdaftar")
-        profiles = db.get_all_profiles()
-        if profiles:
-            df = pd.DataFrame(profiles).rename(columns={'id': 'User ID', 'full_name': 'Nama Lengkap', 'role': 'Role', 'email': 'Email'})
-            st.dataframe(df[['User ID', 'Nama Lengkap', 'Email', 'Role']], use_container_width=True)
-        else:
-            st.info("Belum ada pengguna terdaftar.")
-    with tab2:
-        st.subheader("Form Tambah Pengguna Baru")
-        with st.form("signup_form"):
-            full_name = st.text_input("Nama Lengkap")
-            email = st.text_input("Email")
-            password = st.text_input("Password", type="password")
-            role = st.selectbox("Role", ["marketing", "superadmin"])
-            if st.form_submit_button("Daftarkan Pengguna Baru"):
-                if not all([full_name, email, password]):
-                    st.error("Semua field wajib diisi!")
-                else:
-                    user, error = db.sign_up(email, password, full_name, role)
-                    if user:
-                        st.success(f"Pengguna {full_name} berhasil didaftarkan! Silakan login.")
-                        st.rerun()
-                    else:
-                        st.error(f"Gagal mendaftarkan: {error}")
-
-
-def page_settings():
-    st.title("Pengaturan Aplikasi")
-    config = db.get_app_config()
-    with st.form("config_form"):
-        app_name = st.text_input("Nama Aplikasi", value=config.get('app_name', ''))
-        submitted = st.form_submit_button("Simpan Pengaturan")
-        if submitted:
-            if not app_name:
-                st.error("Nama aplikasi wajib diisi!")
-            else:
-                success, msg = db.update_app_config({'app_name': app_name})
-                if success:
-                    st.success(msg)
-                    st.rerun()
-                else:
-                    st.error(msg)
-
-
+# --- Riset Prospek ---
 def page_prospect_research():
     st.title("Riset Prospek 🔍💼")
     user = st.session_state.user
@@ -423,7 +534,6 @@ def page_prospect_research():
 
     st.subheader("Cari Prospek")
     search_query = st.text_input("Ketik nama perusahaan, kontak, industri, atau lokasi...")
-    
     if search_query:
         filtered_prospects = db.search_prospect_research(search_query)
         st.info(f"Menemukan {len(filtered_prospects)} hasil pencarian untuk '{search_query}'")
@@ -438,21 +548,19 @@ def page_prospect_research():
 
     df = pd.DataFrame(filtered_prospects)
     display_cols = ['company_name', 'contact_name', 'industry', 'status']
-    df_display = df[display_cols].rename(columns={
-        'company_name': 'Perusahaan', 'contact_name': 'Kontak', 'industry': 'Industri', 'status': 'Status'
-    })
-    df_display['Status'] = df_display['Status'].map(STATUS_MAPPING)
+    df_display = df[display_cols].rename(columns={'company_name': 'Perusahaan', 'contact_name': 'Kontak', 'industry': 'Industri', 'status': 'Status'})
+    df_display['Status'] = df_display['status'].map(STATUS_MAPPING)
     st.dataframe(df_display, use_container_width=True, hide_index=True)
 
     st.divider()
     st.subheader("Pilih Prospek untuk Diedit")
-    options = {p['id']: f"{p['company_name']} - {p['contact_name']}" for p in filtered_prospects}
+    options = {p['id']: f"{p['company_name']} - {p.get('contact_name', 'N/A')}" for p in filtered_prospects}
     options[0] = "<< Pilih ID untuk Detail / Edit >>"
     selected_id = st.selectbox("Pilih prospek:", options.keys(), format_func=lambda x: options[x], index=0)
 
     if selected_id == 0:
-        st.subheader("Form Tambah Prospek Baru")
         with st.form("prospect_form"):
+            st.subheader("Form Tambah Prospek Baru")
             col1, col2 = st.columns(2)
             with col1:
                 company_name = st.text_input("Nama Perusahaan*")
@@ -486,8 +594,6 @@ def page_prospect_research():
                     keyword_list = [k.strip() for k in keywords.split(",")] if keywords else []
                     tech_list = [t.strip() for t in technology_used.split(",")] if technology_used else []
 
-                    next_step_date_str = next_step_date.strftime("%Y-%m-%d") if next_step_date else None
-
                     success, msg = db.add_prospect_research(
                         company_name=company_name,
                         website=website,
@@ -505,7 +611,7 @@ def page_prospect_research():
                         technology_used=tech_list,
                         notes=notes,
                         next_step=next_step,
-                        next_step_date=next_step_date_str,
+                        next_step_date=date_to_str(next_step_date),
                         status=status,
                         source=source,
                         decision_maker=False,
@@ -522,8 +628,8 @@ def page_prospect_research():
     else:
         prospect = db.get_prospect_by_id(selected_id)
         if prospect:
-            st.subheader(f"Edit Prospek: {prospect['company_name']} - {prospect['contact_name']}")
             with st.form("edit_prospect_form"):
+                st.subheader(f"Edit Prospek: {prospect['company_name']} - {prospect['contact_name']}")
                 col1, col2 = st.columns(2)
                 with col1:
                     company_name = st.text_input("Nama Perusahaan*", value=prospect.get('company_name'))
@@ -546,19 +652,9 @@ def page_prospect_research():
                 technology_used = st.text_input("Teknologi Digunakan (pisahkan dengan koma)", value=", ".join(prospect.get('technology_used', [])))
                 notes = st.text_area("Catatan", value=prospect.get('notes', ''))
                 next_step = st.text_input("Langkah Lanjutan", value=prospect.get('next_step', ''))
-                
-                # Handle date input
-                next_step_date_db = prospect.get('next_step_date')
-                next_step_date_ui = None
-                if next_step_date_db:
-                    try:
-                        next_step_date_ui = datetime.strptime(next_step_date_db, "%Y-%m-%d").date()
-                    except ValueError:
-                        next_step_date_ui = None
-
-                next_step_date = st.date_input("Tanggal Follow-up", value=next_step_date_ui)
-                next_step_date_str = next_step_date.strftime("%Y-%m-%d") if next_step_date else None
-
+                next_step_db = prospect.get('next_step_date')
+                next_step_ui = str_to_date(next_step_db) if next_step_db else None
+                next_step_date = st.date_input("Tanggal Follow-up", value=next_step_ui)
                 status = st.selectbox("Status Prospek", ["baru", "dalam_proses", "berhasil", "gagal"],
                                      index=["baru", "dalam_proses", "berhasil", "gagal"].index(prospect.get('status', 'baru')))
                 source = st.text_input("Sumber Prospek", value=prospect.get('source', 'manual'))
@@ -570,6 +666,7 @@ def page_prospect_research():
                     else:
                         keyword_list = [k.strip() for k in keywords.split(",")] if keywords else []
                         tech_list = [t.strip() for t in technology_used.split(",")] if technology_used else []
+                        next_step_date_str = date_to_str(next_step_date)
 
                         success, msg = db.edit_prospect_research(
                             prospect_id=selected_id,
@@ -601,6 +698,191 @@ def page_prospect_research():
                             st.rerun()
                         else:
                             st.error(msg)
+
+            if st.button("Hapus Prospek Ini", type="primary"):
+                success, msg = db.delete_prospect_by_id(selected_id)
+                if success:
+                    st.success(msg)
+                    st.rerun()
+                else:
+                    st.error(msg)
+
+            # --- Template Email Otomatis ---
+            st.divider()
+            st.subheader("Template Email Profesional")
+
+            # Hitung jumlah follow-up yang sudah dikirim
+            followups = db.get_followups_by_activity_id(prospect['id'])
+            followup_count = len(followups)
+
+            # Generate template berbasis role, industri, dan frekuensi follow-up
+            contact_title = prospect.get("contact_title", "").lower() if prospect.get("contact_title") else ""
+            prospect_industry = prospect.get("industry", "").lower() if prospect.get("industry") else ""
+
+            html_template = generate_html_email_template(prospect, role=contact_title, industry=prospect_industry, follow_up_number=followup_count + 1)
+
+            edited_html = st_quill(value=html_template, html=True, key="quill_email_editor")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Preview Email"):
+                    st.markdown(edited_html, unsafe_allow_html=True)
+            with col2:
+                if st.button("Simpan Template ke Prospek"):
+                    success, msg = db.save_email_template_to_prospect(prospect_id=selected_id, template_html=edited_html)
+                    if success:
+                        st.success(msg)
+                    else:
+                        st.error(msg)
+
+            if st.button("Kirim Email via Zoho"):
+                with st.spinner("Sedang mengirim..."):
+                    # Auto-refresh token jika expired
+                    if not st.secrets["zoho"].get("access_token"):
+                        success, msg = refresh_zoho_token()
+                        if not success:
+                            st.error(msg)
+                            return
+
+                    success, msg = db.send_email_via_zoho({
+                        "to": prospect.get("contact_email"),
+                        "subject": f"Follow-up {followup_count + 1}: {company_name}",
+                        "content": edited_html,
+                        "from": st.secrets["zoho"]["from_email"]
+                    })
+                    if success:
+                        st.success(msg)
+                    else:
+                        st.error(msg)
+
+            # --- Konfigurasi ---def get_authorization_url():
+    params = {
+        "response_type": "code",
+        "client_id": st.secrets["zoho"]["client_id"],
+        "scope": "ZohoMail.send,ZohoMail.read",
+        "redirect_uri": st.secrets["zoho"].get("redirect_uri", "https://emimtsupabase.streamlit.app/") 
+    }
+    base_url = "https://accounts.zoho.com/oauth/v2/auth?"
+    return base_url + urlencode(params)
+
+
+def refresh_zoho_token():
+    url = "https://accounts.zoho.com/oauth/v2/token"
+    payload = {
+        "grant_type": "refresh_token",
+        "client_id": st.secrets["zoho"]["client_id"],
+        "client_secret": st.secrets["zoho"]["client_secret"],
+        "refresh_token": st.secrets["zoho"].get("refresh_token", "")
+    }
+
+    try:
+        response = requests.post(url, data=payload)
+        if response.status_code == 200:
+            tokens = response.json()
+            st.secrets["zoho"]["access_token"] = tokens.get("access_token", "")
+            if "refresh_token" in tokens:
+                st.secrets["zoho"]["refresh_token"] = tokens.get("refresh_token", "")
+            with open(".streamlit/secrets.toml", "w") as f:
+                toml.dump(st.secrets._file, f)
+            return True, "Token berhasil diperbarui!"
+        else:
+            return False, f"Gagal memperbarui token: {response.text}"
+    except Exception as e:
+        return False, f"Error saat refresh token: {e}"
+
+
+# --- Manajemen Pengguna (Superadmin Only) --- 
+def page_user_management():
+    st.title("Manajemen Pengguna")
+    tab1, tab2 = st.tabs(["Daftar Pengguna", "Tambah Pengguna Baru"])
+    with tab1:
+        profiles = db.get_all_profiles()
+        if profiles:
+            df = pd.DataFrame(profiles).rename(columns={'id': 'User ID', 'full_name': 'Nama Lengkap', 'role': 'Role', 'email': 'Email'})
+            st.dataframe(df[['User ID', 'Nama Lengkap', 'Email', 'Role']], use_container_width=True)
+        else:
+            st.info("Belum ada pengguna terdaftar.")
+    with tab2:
+        st.subheader("Form Tambah Pengguna Baru")
+        with st.form("signup_form"):
+            full_name = st.text_input("Nama Lengkap")
+            email = st.text_input("Email")
+            password = st.text_input("Password", type="password")
+            role = st.selectbox("Role", ["marketing", "superadmin"])
+            if st.form_submit_button("Daftarkan Pengguna Baru"):
+                if not all([full_name, email, password]):
+                    st.error("Semua field wajib diisi!")
+                else:
+                    user, error = db.sign_up(email, password, full_name, role)
+                    if user:
+                        st.success(f"Pengguna {full_name} berhasil didaftarkan.")
+                        st.rerun()
+                    else:
+                        st.error(f"Gagal mendaftarkan: {error}")
+
+
+# --- Pengaturan Aplikasi ---
+def page_settings():
+    st.title("Pengaturan Aplikasi")
+    config = db.get_app_config()
+    with st.form("config_form"):
+        app_name = st.text_input("Nama Aplikasi", value=config.get('app_name', ''))
+        if st.form_submit_button("Simpan Pengaturan"):
+            if not app_name:
+                st.error("Nama aplikasi wajib diisi!")
+            else:
+                success, msg = db.update_app_config({'app_name': app_name})
+                if success:
+                    st.success(msg)
+                    st.rerun()
+                else:
+                    st.error(msg)
+
+    # --- Bagian Autentikasi Zoho Mail ---
+    st.divider()
+    st.subheader("Zoho Mail Setup")
+    zoho_secrets = st.secrets.get("zoho", {})
+    with st.form("zoho_auth_form"):
+        st.write("### Langkah 1: Ambil Code dari Zoho")
+        auth_url = get_authorization_url()
+        st.markdown(f"[Klik di sini untuk izinkan akses Zoho Mail]({auth_url})")
+        code = st.text_input("Masukkan code dari Zoho:")
+        if st.form_submit_button("Generate Access Token"):
+            if not code:
+                st.warning("Silakan masukkan code dari Zoho")
+            else:
+                success, msg = exchange_code_for_tokens(code)
+                if success:
+                    st.success(msg)
+                    st.rerun()
+                else:
+                    st.error(msg)
+
+
+def exchange_code_for_tokens(code):
+    url = "https://accounts.zoho.com/oauth/v2/token" 
+    payload = {
+        "code": code,
+        "client_id": st.secrets["zoho"]["client_id"],
+        "client_secret": st.secrets["zoho"]["client_secret"],
+        "grant_type": "authorization_code",
+        "redirect_uri": st.secrets["zoho"].get("redirect_uri", "https://emimtsupabase.streamlit.app/") 
+    }
+
+    try:
+        response = requests.post(url, data=payload)
+        if response.status_code == 200:
+            tokens = response.json()
+            st.secrets["zoho"]["access_token"] = tokens.get("access_token")
+            if "refresh_token" in tokens:
+                st.secrets["zoho"]["refresh_token"] = tokens.get("refresh_token")
+            with open(".streamlit/secrets.toml", "w") as f:
+                toml.dump(st.secrets._file, f)
+            return True, "Token berhasil digenerate!"
+        else:
+            return False, f"Gagal mendapatkan token: {response.text}"
+    except Exception as e:
+        return False, f"Error: {e}"
 
 
 # --- Logika Utama Aplikasi ---

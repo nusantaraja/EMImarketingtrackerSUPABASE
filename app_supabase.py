@@ -4,7 +4,6 @@ import plotly.express as px
 from datetime import datetime, date
 import db_supabase as db
 import pytz
-#from streamlit_quill import st_quill  # Editor Visual
 import requests
 from urllib.parse import urlencode
 
@@ -32,7 +31,7 @@ def convert_to_wib_and_format(iso_string, format_str='%A, %d %b %Y, %H:%M'):
 
 
 def date_to_str(dt):
-    """Ubah date ke string"""
+    """Ubah date ke string 'YYYY-MM-DD'"""
     return dt.strftime("%Y-%m-%d") if isinstance(dt, date) else dt
 
 
@@ -268,7 +267,7 @@ def page_dashboard():
             marketer_counts = df['marketer_username'].value_counts()
             fig4 = px.bar(marketer_counts, x=marketer_counts.index, y=marketer_counts.values,
                           title="Aktivitas per Marketing", labels={'x': 'Nama Marketing', 'y': 'Jumlah Aktivitas'},
-                          color=marketer_counts.values, color_continuous_scale=px.colors.sequential.Viridis, height=300)
+                          color_continuous_scale=px.colors.sequential.Viridis, height=300)
             st.plotly_chart(fig4, use_container_width=True)
 
     st.divider()
@@ -307,7 +306,7 @@ def page_dashboard():
                 'next_followup_date': 'Tanggal', 'prospect_name': 'Prospek',
                 'marketer_username': 'Marketing', 'next_action': 'Tindakan'
             })
-            upcoming_display_df['Tanggal'] = upcoming_display_df['next_followup_date'].dt.tz_convert(wib_tz).dt.strftime('%A, %d %b %Y')
+            upcoming_display_df['Tanggal'] = upcoming_display_df['Tanggal'].dt.tz_convert(wib_tz).dt.strftime('%A, %d %b %Y')
             st.dataframe(upcoming_display_df, use_container_width=True, hide_index=True)
         else:
             st.info("Tidak ada jadwal follow-up dalam 7 hari ke depan.")
@@ -323,8 +322,8 @@ def page_dashboard():
                 if raw_prospects:
                     saved_count = 0
                     for p in raw_prospects:
-                        p["marketer_id"] = user.id
-                        p["marketer_username"] = profile.get("full_name")
+                        p["marketer_id"] = st.session_state.user.id
+                        p["marketer_username"] = st.session_state.profile.get("full_name")
                         success, msg = db.add_prospect_research(**p)
                         if success:
                             saved_count += 1
@@ -547,21 +546,13 @@ def page_prospect_research():
         return
 
     df = pd.DataFrame(filtered_prospects)
-    # Pastikan kolom 'status' tersedia sebelum dipakai
-if 'status' in df.columns:
     display_cols = ['company_name', 'contact_name', 'industry', 'status']
-    df_display = df[display_cols].rename(
-        columns={
-            'company_name': 'Perusahaan',
-            'contact_name': 'Kontak',
-            'industry': 'Industri',
-            'status': 'Status'
-        }
-    )
+    if 'status' not in df.columns:
+        st.error("Kolom 'status' tidak ditemukan di data prospek. Pastikan tabel Supabase memiliki kolom 'status'.")
+        return
+
+    df_display = df[display_cols].rename(columns={'company_name': 'Perusahaan', 'contact_name': 'Kontak', 'industry': 'Industri', 'status': 'Status'})
     df_display['Status'] = df_display['Status'].map(STATUS_MAPPING).fillna("Tidak Diketahui")
-else:
-    st.error("Kolom 'status' tidak ditemukan dalam data prospek.")
-    st.stop()
     st.dataframe(df_display, use_container_width=True, hide_index=True)
 
     st.divider()
@@ -598,8 +589,7 @@ else:
             status = st.selectbox("Status Prospek", ["baru", "dalam_proses", "berhasil", "gagal"])
             source = st.text_input("Sumber Prospek", value="manual")
 
-            submitted = st.form_submit_button("Simpan Prospek")
-            if submitted:
+            if st.form_submit_button("Simpan Prospek"):
                 if not company_name or not contact_name:
                     st.error("Nama perusahaan dan nama kontak wajib diisi!")
                 else:
@@ -733,10 +723,8 @@ else:
 
             html_template = generate_html_email_template(prospect, role=contact_title, industry=prospect_industry, follow_up_number=followup_count + 1)
 
-            edited_html = st.text_area("Edit Template Email", value=html_template, height=400, key="email_template_editor")
-    
-        if st.button("Preview Email"):
-            st.markdown(edited_html, unsafe_allow_html=True)    
+            edited_html = st.text_area("Edit Template Email", value=html_template, height=400)
+
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("Preview Email"):
@@ -753,7 +741,7 @@ else:
                 with st.spinner("Sedang mengirim..."):
                     # Auto-refresh token jika expired
                     if not st.secrets["zoho"].get("access_token"):
-                        success, msg = refresh_zoho_token()
+                        success, msg = db.refresh_zoho_token()
                         if not success:
                             st.error(msg)
                             return
@@ -769,46 +757,12 @@ else:
                     else:
                         st.error(msg)
 
-            # --- Konfigurasi ---def get_authorization_url():
-    params = {
-        "response_type": "code",
-        "client_id": st.secrets["zoho"]["client_id"],
-        "scope": "ZohoMail.send,ZohoMail.read",
-        "redirect_uri": st.secrets["zoho"].get("redirect_uri", "https://emimtsupabase.streamlit.app/") 
-    }
-    base_url = "https://accounts.zoho.com/oauth/v2/auth?"
-    return base_url + urlencode(params)
 
-
-def refresh_zoho_token():
-    url = "https://accounts.zoho.com/oauth/v2/token"
-    payload = {
-        "grant_type": "refresh_token",
-        "client_id": st.secrets["zoho"]["client_id"],
-        "client_secret": st.secrets["zoho"]["client_secret"],
-        "refresh_token": st.secrets["zoho"].get("refresh_token", "")
-    }
-
-    try:
-        response = requests.post(url, data=payload)
-        if response.status_code == 200:
-            tokens = response.json()
-            st.secrets["zoho"]["access_token"] = tokens.get("access_token", "")
-            if "refresh_token" in tokens:
-                st.secrets["zoho"]["refresh_token"] = tokens.get("refresh_token", "")
-            with open(".streamlit/secrets.toml", "w") as f:
-                toml.dump(st.secrets._file, f)
-            return True, "Token berhasil diperbarui!"
-        else:
-            return False, f"Gagal memperbarui token: {response.text}"
-    except Exception as e:
-        return False, f"Error saat refresh token: {e}"
-
-
-# --- Manajemen Pengguna (Superadmin Only) --- 
+# --- Manajemen Pengguna (Superadmin Only) ---
 def page_user_management():
     st.title("Manajemen Pengguna")
     tab1, tab2 = st.tabs(["Daftar Pengguna", "Tambah Pengguna Baru"])
+
     with tab1:
         profiles = db.get_all_profiles()
         if profiles:
@@ -816,23 +770,23 @@ def page_user_management():
             st.dataframe(df[['User ID', 'Nama Lengkap', 'Email', 'Role']], use_container_width=True)
         else:
             st.info("Belum ada pengguna terdaftar.")
+
     with tab2:
         st.subheader("Form Tambah Pengguna Baru")
-        with st.form("signup_form"):
-            full_name = st.text_input("Nama Lengkap")
-            email = st.text_input("Email")
-            password = st.text_input("Password", type="password")
-            role = st.selectbox("Role", ["marketing", "superadmin"])
-            if st.form_submit_button("Daftarkan Pengguna Baru"):
-                if not all([full_name, email, password]):
-                    st.error("Semua field wajib diisi!")
+        full_name = st.text_input("Nama Lengkap")
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+        role = st.selectbox("Role", ["marketing", "superadmin"])
+        if st.button("Daftarkan Pengguna Baru"):
+            if not all([full_name, email, password]):
+                st.error("Semua field wajib diisi!")
+            else:
+                user, error = db.sign_up(email, password, full_name, role)
+                if user:
+                    st.success(f"Pengguna {full_name} berhasil didaftarkan.")
+                    st.rerun()
                 else:
-                    user, error = db.sign_up(email, password, full_name, role)
-                    if user:
-                        st.success(f"Pengguna {full_name} berhasil didaftarkan.")
-                        st.rerun()
-                    else:
-                        st.error(f"Gagal mendaftarkan: {error}")
+                    st.error(f"Gagal mendaftarkan: {error}")
 
 
 # --- Pengaturan Aplikasi ---
@@ -861,11 +815,12 @@ def page_settings():
         auth_url = get_authorization_url()
         st.markdown(f"[Klik di sini untuk izinkan akses Zoho Mail]({auth_url})")
         code = st.text_input("Masukkan code dari Zoho:")
+
         if st.form_submit_button("Generate Access Token"):
             if not code:
                 st.warning("Silakan masukkan code dari Zoho")
             else:
-                success, msg = exchange_code_for_tokens(code)
+                success, msg = db.exchange_code_for_tokens(code)
                 if success:
                     st.success(msg)
                     st.rerun()
@@ -873,33 +828,18 @@ def page_settings():
                     st.error(msg)
 
 
-def exchange_code_for_tokens(code):
-    url = "https://accounts.zoho.com/oauth/v2/token" 
-    payload = {
-        "code": code,
+def get_authorization_url():
+    params = {
+        "response_type": "code",
         "client_id": st.secrets["zoho"]["client_id"],
-        "client_secret": st.secrets["zoho"]["client_secret"],
-        "grant_type": "authorization_code",
-        "redirect_uri": st.secrets["zoho"].get("redirect_uri", "https://emimtsupabase.streamlit.app/") 
+        "scope": "ZohoMail.send,ZohoMail.read",
+        "redirect_uri": st.secrets["zoho"].get("redirect_uri", "https://emimtsupabase.streamlit.app/oauth/callback") 
     }
-
-    try:
-        response = requests.post(url, data=payload)
-        if response.status_code == 200:
-            tokens = response.json()
-            st.secrets["zoho"]["access_token"] = tokens.get("access_token")
-            if "refresh_token" in tokens:
-                st.secrets["zoho"]["refresh_token"] = tokens.get("refresh_token")
-            with open(".streamlit/secrets.toml", "w") as f:
-                toml.dump(st.secrets._file, f)
-            return True, "Token berhasil digenerate!"
-        else:
-            return False, f"Gagal mendapatkan token: {response.text}"
-    except Exception as e:
-        return False, f"Error: {e}"
+    base_url = "https://accounts.zoho.com/oauth/v2/auth?"
+    return base_url + urlencode(params)
 
 
-# --- Logika Utama Aplikasi ---
+# --- Logika Utama Aplikasi --- 
 def main():
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False

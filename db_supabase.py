@@ -2,16 +2,17 @@ import streamlit as st
 from supabase import create_client, Client
 from datetime import datetime
 import requests
+import toml
 
 
 @st.cache_resource
-def init_connection():
+def init_connection() -> Client:
     try:
         url = st.secrets["supabase"]["url"]
         key = st.secrets["supabase"]["key"]
         return create_client(url, key)
     except Exception as e:
-        st.error(f"Gagal terhubung ke Supabase: {e}")
+        st.error("Gagal terhubung ke Supabase. Pastikan secrets sudah benar.")
         st.stop()
         return None
 
@@ -34,7 +35,12 @@ def sign_up(email, password, full_name, role):
         user = response.user
 
         if user:
-            profile_data = {"id": user.id, "full_name": full_name, "role": role, "email": email}
+            profile_data = {
+                "id": user.id,
+                "full_name": full_name,
+                "role": role,
+                "email": email
+            }
             supabase.from_("profiles").insert(profile_data).execute()
 
         return user, None
@@ -64,7 +70,7 @@ def get_all_profiles():
 
 
 def delete_user_by_id(user_id):
-    return False, "Fitur Hapus Pengguna sedang dalam pengembangan"
+    return False, "Fitur Hapus Pengguna sedang dalam pengembangan."
 
 
 # --- Marketing Activities CRUD ---
@@ -153,6 +159,7 @@ def delete_marketing_activity(activity_id):
     except Exception as e:
         return False, f"Gagal menghapus aktivitas: {e}"
 
+
 # --- Follow-up CRUD ---
 def get_followups_by_activity_id(activity_id):
     supabase = init_connection()
@@ -167,10 +174,10 @@ def get_followups_by_activity_id(activity_id):
 def add_followup(activity_id, marketer_id, marketer_username, notes, next_action, next_followup_date, interest_level, status_update):
     supabase = init_connection()
     try:
-        # Update status utama
+        # Update status aktivitas utama
         supabase.from_("marketing_activities").update({"status": status_update}).eq("id", activity_id).execute()
 
-        # Format tanggal
+        # Format tanggal follow-up
         next_followup_date_str = next_followup_date.strftime("%Y-%m-%d") if next_followup_date else None
 
         data_to_insert = {
@@ -189,7 +196,6 @@ def add_followup(activity_id, marketer_id, marketer_username, notes, next_action
         return False, f"Gagal menambahkan follow-up: {e}"
 
 
-# --- Riset Prospek CRUD ---
 # --- Riset Prospek CRUD ---
 def get_all_prospect_research():
     supabase = init_connection()
@@ -304,12 +310,16 @@ def search_prospect_research(keyword):
         return []
 
 
+# --- Sinkronisasi dari Apollo.io ---
 def sync_prospect_from_apollo(query):
+    """
+    Tarik data prospek dari Apollo.io berdasarkan query.
+    """
     url = "https://api.apollo.io/v1/mixed_people_search" 
     headers = {
         "Content-Type": "application/json",
         "Cache-Control": "no-cache",
-        "X-Api-Key": st.secrets["apollo"]["api_key"]
+        "X-Api-Key": st.secrets["apollo"]["api_key"]  # Harus ada di secrets.toml
     }
 
     payload = {
@@ -353,7 +363,6 @@ def sync_prospect_from_apollo(query):
                     "marketer_id": st.session_state.user.id,
                     "marketer_username": st.session_state.profile.get("full_name")
                 }
-
                 prospects.append(prospect_data)
 
             return prospects
@@ -365,6 +374,7 @@ def sync_prospect_from_apollo(query):
         return []
 
 
+# --- Konfigurasi Aplikasi ---
 def get_app_config():
     supabase = init_connection()
     try:
@@ -385,20 +395,54 @@ def update_app_config(new_config):
         return False, f"Error saat update konfigurasi: {e}"
 
 
+# --- Template Email (Opsional - Bisa Ditambah Nanti) ---
 def save_email_template_to_prospect(prospect_id, template_html):
     supabase = init_connection()
     try:
         data_to_update = {
             "last_email_template": template_html
         }
-        response = supabase.from_("prospect_research").update(data_to_update).eq("id", prospect_id).execute()
+        supabase.from_("prospect_research").update(data_to_update).eq("id", prospect_id).execute()
         return True, "Template berhasil disimpan!"
     except Exception as e:
         return False, f"Gagal menyimpan template: {e}"
 
 
-# --- Fungsi Kirim Email via Zoho Mail ---
-# --- Fungsi Kirim Email via Zoho Mail ---
+def send_email_via_zoho(email_data):
+    """
+    Mengirim email via Zoho Mail API
+    
+    email_data = {
+        "to": "tujuan@example.com",
+        "subject": "Judul Email",
+        "content": "<p>Isi email</p>",
+        "from": "kamu@domainmu.com"
+    }
+    """
+    url = "https://mail.zoho.com/api/v1/messages" 
+    headers = {
+        "Authorization": f"Zoho-oauthtoken {st.secrets['zoho']['access_token']}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "from": {"address": email_data["from"]},
+        "to": [{"address": email_data["to"]}],
+        "subject": email_data["subject"],
+        "content": [{"type": "text/html", "content": email_data["content"]}]
+    }
+
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        if response.status_code in [200, 202]:
+            return True, "Email berhasil dikirim!"
+        else:
+            return False, f"Gagal kirim email: {response.text}"
+    except Exception as e:
+        return False, f"Error saat kirim email: {e}"
+
+
+# --- Refresh Token Zoho ---
 def exchange_code_for_tokens(code):
     url = "https://accounts.zoho.com/oauth/v2/token" 
     payload = {
@@ -417,7 +461,6 @@ def exchange_code_for_tokens(code):
             if "refresh_token" in tokens:
                 st.secrets["zoho"]["refresh_token"] = tokens.get("refresh_token", "")
 
-            # Simpan secrets.toml ulang
             with open(".streamlit/secrets.toml", "w") as f:
                 toml.dump(st.secrets._file, f)
 
@@ -426,6 +469,7 @@ def exchange_code_for_tokens(code):
             return False, f"Gagal mendapatkan token: {response.text}"
     except Exception as e:
         return False, f"Error: {e}"
+
 
 def refresh_zoho_token():
     url = "https://accounts.zoho.com/oauth/v2/token" 
@@ -444,7 +488,6 @@ def refresh_zoho_token():
             if "refresh_token" in tokens:
                 st.secrets["zoho"]["refresh_token"] = tokens.get("refresh_token", "")
 
-            # Simpan secrets.toml ulang
             with open(".streamlit/secrets.toml", "w") as f:
                 toml.dump(st.secrets._file, f)
 
@@ -453,26 +496,3 @@ def refresh_zoho_token():
             return False, f"Gagal memperbarui token: {response.text}"
     except Exception as e:
         return False, f"Error saat refresh token: {e}"
-
-
-def send_email_via_zoho(email_data):
-    headers = {
-        "Authorization": f"Zoho-oauthtoken {st.secrets['zoho']['access_token']}",
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "from": {"address": email_data["from"]},
-        "to": [{"address": email_data["to"]}],
-        "subject": email_data["subject"],
-        "content": [{"type": "text/html", "content": email_data["content"]}]
-    }
-
-    try:
-        response = requests.post("https://mail.zoho.com/api/v1/messages",  json=payload, headers=headers)
-        if response.status_code in [200, 202]:
-            return True, "Email berhasil dikirim!"
-        else:
-            return False, f"Gagal kirim email: {response.text}"
-    except Exception as e:
-        return False, f"Error saat kirim email: {e}"

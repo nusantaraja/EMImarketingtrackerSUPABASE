@@ -4,6 +4,7 @@ plotly==6.1.2
 supabase==2.15.3
 pytz==2025.2
 requests==2.31.0
-tomlkit==0.7.3
 rich==14.0.0
 markdown-it-py==3.0.0
+pygments==2.19.1
+mdurl==0.1.2

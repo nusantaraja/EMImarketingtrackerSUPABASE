@@ -164,7 +164,8 @@ def delete_marketing_activity(activity_id):
 def get_followups_by_activity_id(activity_id):
     supabase = init_connection()
     try:
-        response = supabase.from_("followups").select("*").eq("activity_id", activity_id).order("created_at", desc=True).execute()
+        # Pastikan activity_id dikirim sebagai string
+        response = supabase.from_("followups").select("*").eq("activity_id", str(activity_id)).execute()
         return response.data
     except Exception as e:
         st.error(f"Error mengambil data follow-up: {e}")

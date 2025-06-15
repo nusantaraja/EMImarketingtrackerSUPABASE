@@ -137,7 +137,7 @@ def add_prospect_research(**kwargs):
             "technology_used": kwargs.get("technology_used", []),
             "notes": kwargs.get("notes"),
             "next_step": kwargs.get("next_step"),
-            "next_step_date": kwargs.get("next_step_date"),
+            "next_step_date": kwargs.get("next_step_date"),  # Sudah dalam format string
             "status": kwargs.get("status", "baru"),
             "source": kwargs.get("source", "manual"),
             "decision_maker": kwargs.get("decision_maker", False),
@@ -211,7 +211,7 @@ def sync_prospect_from_apollo(query):
     headers = {
         "Content-Type": "application/json",
         "Cache-Control": "no-cache",
-        "X-Api-Key": st.secrets["apollo"]["api_key"]  # ✅ Benar: dikirim lewat headers
+        "X-Api-Key": st.secrets["apollo"]["api_key"]  # ✅ Harus di headers
     }
 
     payload = {
@@ -277,7 +277,7 @@ def get_app_config():
 
 
 def update_app_config(new_config):
-    """Memperbarui konfigurasi aplikasi."""
+    """Memperbarui konfigurasi aplikasi"""
     supabase = init_connection()
     try:
         for key, value in new_config.items():
@@ -325,7 +325,8 @@ def add_marketing_activity(marketer_id, marketer_username, prospect_name, prospe
     """Menyimpan aktivitas pemasaran baru"""
     supabase = init_connection()
     try:
-        activity_date_str = activity_date.strftime("%Y-%m-%d") if isinstance(activity_date, datetime) else str(activity_date)
+        # Pastikan activity_date dalam format string
+        activity_date_str = activity_date.strftime("%Y-%m-%d") if isinstance(activity_date, datetime.date) else str(activity_date)
 
         data_to_insert = {
             "marketer_id": marketer_id,
@@ -346,7 +347,7 @@ def add_marketing_activity(marketer_id, marketer_username, prospect_name, prospe
         if response.data:
             return True, "Aktivitas berhasil ditambahkan.", response.data[0]["id"]
         else:
-            raise Exception(response.error.message if hasattr(response, 'error') else "Unknown error")
+            raise Exception(response.error.message if hasattr(response, 'error') and response.error else "Unknown error")
     except Exception as e:
         return False, f"Gagal menambahkan aktivitas: {e}", None
 
@@ -355,7 +356,8 @@ def edit_marketing_activity(activity_id, prospect_name, prospect_location, conta
     """Mengedit aktivitas pemasaran"""
     supabase = init_connection()
     try:
-        activity_date_str = activity_date.strftime("%Y-%m-%d") if isinstance(activity_date, datetime) else str(activity_date)
+        # Pastikan activity_date dalam format string
+        activity_date_str = activity_date.strftime("%Y-%m-%d") if isinstance(activity_date, datetime.date) else str(activity_date)
 
         data_to_update = {
             "prospect_name": prospect_name,
@@ -374,31 +376,30 @@ def edit_marketing_activity(activity_id, prospect_name, prospect_location, conta
         if response.data:
             return True, "Aktivitas berhasil diperbarui."
         else:
-            raise Exception(response.error.message if hasattr(response, 'error') else "Unknown error")
+            raise Exception(response.error.message if hasattr(response, 'error') and response.error else "Unknown error")
     except Exception as e:
         return False, f"Gagal memperbarui aktivitas: {e}"
 
 
 def delete_marketing_activity(activity_id):
-    """Menghapus aktivitas pemasaran beserta follow-up-nya."""
+    """Menghapus aktivitas pemasaran beserta follow-up-nya"""
     supabase = init_connection()
     try:
         # Hapus follow-up terlebih dahulu
         supabase.from_("followups").delete().eq("activity_id", activity_id).execute()
         # Hapus aktivitas utama
         response = supabase.from_("marketing_activities").delete().eq("id", activity_id).execute()
-
         if response.data:
             return True, "Aktivitas berhasil dihapus."
         else:
             raise Exception(response.error.message if hasattr(response, 'error') else "Unknown error")
     except Exception as e:
-        return False, f"Gagal menghapus aktivitas: {e}"
+        return False, f"Gagal menghapus: {e}"
 
 
 # --- Follow-up CRUD ---
 def get_followups_by_activity_id(activity_id):
-    """Mengambil semua follow-up untuk satu aktivitas."""
+    """Mengambil semua follow-up untuk aktivitas tertentu"""
     supabase = init_connection()
     try:
         response = supabase.from_("followups").select("*").eq("activity_id", activity_id).order("created_at", desc=True).execute()
@@ -409,13 +410,13 @@ def get_followups_by_activity_id(activity_id):
 
 
 def add_followup(activity_id, marketer_id, marketer_username, notes, next_action, next_followup_date, interest_level, status_update):
-    """Menambahkan follow-up baru dan memperbarui status aktivitas."""
+    """Menambahkan follow-up baru"""
     supabase = init_connection()
     try:
-        # 1. Update status aktivitas utama
+        # Update status aktivitas utama
         supabase.from_("marketing_activities").update({"status": status_update}).eq("id", activity_id).execute()
 
-        # 2. Tambahkan follow-up
+        # Siapkan data follow-up
         next_followup_date_str = next_followup_date.strftime("%Y-%m-%d") if next_followup_date else None
 
         data_to_insert = {

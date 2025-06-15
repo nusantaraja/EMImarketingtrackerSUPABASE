@@ -25,7 +25,8 @@ def convert_to_wib_and_format(iso_string, format_str='%A, %d %b %Y, %H:%M'):
         return iso_string
 
 
-# --- Fungsi-fungsi Halaman (Pages) ---
+# --- Fungsi-fungsi Halaman ---
+
 def show_login_page():
     st.title("EMI Marketing Tracker 💼📊")
     with st.form("login_form"):
@@ -52,7 +53,6 @@ def show_sidebar():
         st.write(f"Role: **{profile.get('role', 'N/A').capitalize()}**")
         st.divider()
 
-        # Daftar halaman utama
         pages = ["Dashboard", "Aktivitas Pemasaran", "Riset Prospek"]
         if profile.get('role') == 'superadmin':
             pages.extend(["Manajemen Pengguna", "Pengaturan"])
@@ -74,7 +74,7 @@ def page_dashboard():
     profile = st.session_state.profile
 
     activities = db.get_all_marketing_activities() if profile.get('role') == 'superadmin' else db.get_marketing_activities_by_user_id(user.id)
-    
+
     if not activities:
         st.info("Belum ada data aktivitas untuk ditampilkan.")
         df = pd.DataFrame()
@@ -87,7 +87,6 @@ def page_dashboard():
     if profile.get('role') == 'superadmin':
         col3.metric("Jumlah Tim Marketing", df['marketer_id'].nunique())
 
-    st.divider()
     st.subheader("Analisis Aktivitas Pemasaran")
 
     col1, col2 = st.columns(2)
@@ -107,8 +106,9 @@ def page_dashboard():
         with col3:
             location_counts = df['prospect_location'].str.strip().str.title().value_counts().nlargest(10)
             fig3 = px.bar(location_counts, x=location_counts.index, y=location_counts.values,
-                          title="Top 10 Lokasi Prospek", labels={'x': 'Kota/Lokasi', 'y': 'Jumlah Prospek'})
-            st.plotly_chart(fig3, use_container_width=True)
+                          title="Top 10 Lokasi Prospek", labels={'x': 'Kota/Lokasi', 'y': 'Jumlah Prospek'},
+                          color_continuous_scale=px.colors.sequential.Viridis, use_container_width=True)
+            st.plotly_chart(fig3)
         with col4:
             marketer_counts = df['marketer_username'].value_counts()
             fig4 = px.bar(marketer_counts, x=marketer_counts.index, y=marketer_counts.values,
@@ -159,7 +159,6 @@ def page_dashboard():
     # --- Sinkron dari Apollo.io (Superadmin Only) ---
     st.divider()
     st.subheader("Sinkron dari Apollo.io")
-    
     if profile.get('role') == 'superadmin':
         apollo_query = st.text_input("Masukkan query pencarian (misal: industry:Technology AND location:Jakarta)")
         if st.button("Tarik Data dari Apollo.io"):
@@ -168,13 +167,11 @@ def page_dashboard():
                 if raw_prospects:
                     saved_count = 0
                     for p in raw_prospects:
-                        p["marketer_id"] = st.session_state.user.id
-                        p["marketer_username"] = st.session_state.profile.get("full_name")
-
+                        p["marketer_id"] = user.id
+                        p["marketer_username"] = profile.get("full_name")
                         success, msg = db.add_prospect_research(**p)
                         if success:
                             saved_count += 1
-
                     st.success(f"{saved_count} prospek berhasil ditarik dan disimpan.")
                     st.rerun()
                 else:
@@ -215,7 +212,6 @@ def page_activities_management():
         paginated_df_display['Status'] = paginated_df_display['Status'].map(STATUS_MAPPING)
         st.dataframe(paginated_df_display, use_container_width=True, hide_index=True)
 
-    st.divider()
     col_nav1, col_nav2, col_nav3 = st.columns([3, 2, 3])
     with col_nav1:
         if st.button("⬅️ PREVIOUS", disabled=(st.session_state.page_num <= 1)):
@@ -267,7 +263,7 @@ def show_activity_form(activity):
         description = st.text_area("Deskripsi", value=activity.get('description', '') if activity else "", height=150)
         submitted = st.form_submit_button(button_label)
         if submitted:
-            if not prospect_name:
+            if not prospect_name or not contact_person:
                 st.error("Nama Prospek wajib diisi!")
             else:
                 status_key = REVERSE_STATUS_MAPPING[status_display]
@@ -280,7 +276,7 @@ def show_activity_form(activity):
                         contact_position,
                         contact_phone,
                         contact_email,
-                        activity_date,
+                        activity_date.strftime("%Y-%m-%d") if isinstance(activity_date, datetime.date) else "",
                         activity_type,
                         description,
                         status_key
@@ -295,7 +291,7 @@ def show_activity_form(activity):
                         contact_position,
                         contact_phone,
                         contact_email,
-                        activity_date,
+                        activity_date.strftime("%Y-%m-%d") if isinstance(activity_date, datetime.date) else "",
                         activity_type,
                         description,
                         status_key
@@ -333,7 +329,6 @@ def show_followup_section(activity):
                 st.markdown(f"**{fu_time_display} WIB oleh {fu['marketer_username']}**")
                 st.markdown(f"**Catatan:** {fu['notes']}")
                 st.caption(f"Tindak Lanjut: {fu.get('next_action', 'N/A')} | Jadwal: {fu.get('next_followup_date', 'N/A')} | Minat: {fu.get('interest_level', 'N/A')}")
-
     else:
         st.caption("Belum ada follow-up untuk aktivitas ini.")
 
@@ -357,7 +352,7 @@ def show_followup_section(activity):
                     st.session_state.profile.get('full_name', 'N/A'),
                     notes,
                     next_action,
-                    next_followup_date,
+                    next_followup_date.strftime("%Y-%m-%d") if next_followup_date else None,
                     interest_level,
                     new_status_key
                 )
@@ -421,16 +416,14 @@ def page_prospect_research():
     user = st.session_state.user
     profile = st.session_state.profile
 
-    # Ambil semua prospek
     if profile.get('role') == 'superadmin':
         prospects = db.get_all_prospect_research()
     else:
         prospects = db.get_prospect_research_by_marketer(user.id)
 
-    # --- Form Pencarian ---
     st.subheader("Cari Prospek")
     search_query = st.text_input("Ketik nama perusahaan, kontak, industri, atau lokasi...")
-
+    
     if search_query:
         filtered_prospects = db.search_prospect_research(search_query)
         st.info(f"Menemukan {len(filtered_prospects)} hasil pencarian untuk '{search_query}'")
@@ -438,8 +431,6 @@ def page_prospect_research():
         filtered_prospects = prospects
 
     st.divider()
-
-    # --- Daftar Prospek ---
     st.subheader("Daftar Prospek")
     if not filtered_prospects:
         st.info("Belum ada data prospek.")
@@ -459,7 +450,6 @@ def page_prospect_research():
     options[0] = "<< Pilih ID untuk Detail / Edit >>"
     selected_id = st.selectbox("Pilih prospek:", options.keys(), format_func=lambda x: options[x], index=0)
 
-    # --- Form Edit atau Tambah Baru ---
     if selected_id == 0:
         st.subheader("Form Tambah Prospek Baru")
         with st.form("prospect_form"):
@@ -496,6 +486,8 @@ def page_prospect_research():
                     keyword_list = [k.strip() for k in keywords.split(",")] if keywords else []
                     tech_list = [t.strip() for t in technology_used.split(",")] if technology_used else []
 
+                    next_step_date_str = next_step_date.strftime("%Y-%m-%d") if next_step_date else None
+
                     success, msg = db.add_prospect_research(
                         company_name=company_name,
                         website=website,
@@ -513,7 +505,7 @@ def page_prospect_research():
                         technology_used=tech_list,
                         notes=notes,
                         next_step=next_step,
-                        next_step_date=next_step_date,
+                        next_step_date=next_step_date_str,
                         status=status,
                         source=source,
                         decision_maker=False,
@@ -554,8 +546,21 @@ def page_prospect_research():
                 technology_used = st.text_input("Teknologi Digunakan (pisahkan dengan koma)", value=", ".join(prospect.get('technology_used', [])))
                 notes = st.text_area("Catatan", value=prospect.get('notes', ''))
                 next_step = st.text_input("Langkah Lanjutan", value=prospect.get('next_step', ''))
-                next_step_date = st.date_input("Tanggal Follow-up", value=prospect.get('next_step_date'))
-                status = st.selectbox("Status Prospek", ["baru", "dalam_proses", "berhasil", "gagal"], index=["baru", "dalam_proses", "berhasil", "gagal"].index(prospect.get('status', 'baru')))
+                
+                # Handle date input
+                next_step_date_db = prospect.get('next_step_date')
+                next_step_date_ui = None
+                if next_step_date_db:
+                    try:
+                        next_step_date_ui = datetime.strptime(next_step_date_db, "%Y-%m-%d").date()
+                    except ValueError:
+                        next_step_date_ui = None
+
+                next_step_date = st.date_input("Tanggal Follow-up", value=next_step_date_ui)
+                next_step_date_str = next_step_date.strftime("%Y-%m-%d") if next_step_date else None
+
+                status = st.selectbox("Status Prospek", ["baru", "dalam_proses", "berhasil", "gagal"],
+                                     index=["baru", "dalam_proses", "berhasil", "gagal"].index(prospect.get('status', 'baru')))
                 source = st.text_input("Sumber Prospek", value=prospect.get('source', 'manual'))
 
                 submitted = st.form_submit_button("Simpan Perubahan")
@@ -584,7 +589,7 @@ def page_prospect_research():
                             technology_used=tech_list,
                             notes=notes,
                             next_step=next_step,
-                            next_step_date=next_step_date,
+                            next_step_date=next_step_date_str,
                             status=status,
                             source=source,
                             decision_maker=False,

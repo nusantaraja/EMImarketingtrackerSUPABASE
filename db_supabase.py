@@ -247,7 +247,8 @@ def exchange_code_for_tokens(code):
             tokens = response.json()
             st.secrets["zoho"]["access_token"] = tokens.get("access_token", "")
             if "refresh_token" in tokens: st.secrets["zoho"]["refresh_token"] = tokens.get("refresh_token", "")
-            with open(".streamlit/secrets.toml", "w") as f: toml.dump(st.secrets._file, f)
+            # Perlu cara yang lebih baik untuk update secrets di production
+            # with open(".streamlit/secrets.toml", "w") as f: toml.dump(st.secrets, f)
             return True, "Token berhasil digenerate!"
         else: return False, f"Gagal mendapatkan token: {response.text}"
     except Exception as e: return False, f"Error: {e}"
@@ -260,7 +261,8 @@ def refresh_zoho_token():
             tokens = response.json()
             st.secrets["zoho"]["access_token"] = tokens.get("access_token", "")
             if "refresh_token" in tokens: st.secrets["zoho"]["refresh_token"] = tokens.get("refresh_token", "")
-            with open(".streamlit/secrets.toml", "w") as f: toml.dump(st.secrets._file, f)
+            # Perlu cara yang lebih baik untuk update secrets di production
+            # with open(".streamlit/secrets.toml", "w") as f: toml.dump(st.secrets, f)
             return True, "Token berhasil diperbarui!"
         else: return False, f"Gagal memperbarui token: {response.text}"
     except Exception as e: return False, f"Error saat refresh token: {e}"

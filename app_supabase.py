@@ -1,4 +1,4 @@
-# --- START OF FILE app_supabase.py (Versi Final, Lengkap, Utuh, Teruji) ---
+# --- START OF FILE app_supabase.py (Versi Final, Lengkap, Utuh) ---
 
 import streamlit as st
 import pandas as pd
@@ -33,7 +33,7 @@ def date_to_str(dt):
 def str_to_date(s):
     return datetime.strptime(s, "%Y-%m-%d").date() if s else None
 
-# --- Helper Template Email (Final & Dinamis) ---
+# --- Helper Template Email (Final & Dinamis dengan Tanda Tangan Rapi) ---
 def generate_html_email_template(prospect, user_profile):
     contact_name = prospect.get("contact_name", "Bapak/Ibu")
     company_name = prospect.get("company_name", "Perusahaan Anda")
@@ -53,7 +53,19 @@ def generate_html_email_template(prospect, user_profile):
         sender_title = "Business Development, Solusi AI Indonesia"
         email_body = f"""<p>Saya <strong>{sender_name}</strong> dari tim Business Development di <strong>Solusi AI Indonesia</strong>.</p><p>Apakah tim Anda di <strong>{company_name}</strong> menghabiskan banyak waktu menjawab pertanyaan pelanggan yang berulang?</p><p>Saya bisa siapkan demo singkat 15 menit untuk menunjukkan cara kerjanya. Apakah hari Selasa atau Kamis sore pekan ini cocok untuk Anda?</p>"""
     
-    return f"""<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;"><h2 style="color: #1f77b4;">Penawaran AI untuk {company_name}</h2><p>Yth. Bapak/Ibu <strong>{contact_name}</strong>,</p>{email_body}<p>Terima kasih atas waktu dan perhatian Anda.</p><br><p>Hormat saya,</p><p style="margin-bottom: 0;"><strong>{sender_name}</strong></p><p style="margin-top: 0; margin-bottom: 0;"><em>{sender_title}</em></p><p style="margin-top: 0; margin-bottom: 0;"><a href="https://solusiai.id">solusiai.id</a></p>{f'<p style="margin-top: 0;"><a href="{sender_linkedin}">Profil LinkedIn</a></p>' if sender_linkedin else ""}</div>""".strip()
+    return f"""
+    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <h2 style="color: #1f77b4;">Penawaran AI untuk {company_name}</h2>
+        <p>Yth. Bapak/Ibu <strong>{contact_name}</strong>,</p>
+        {email_body}
+        <p>Terima kasih atas waktu dan perhatian Anda.</p>
+        <p>Hormat saya,</p>
+        <p style="margin-bottom: 0;"><strong>{sender_name}</strong></p>
+        <p style="margin-top: 0; margin-bottom: 0;"><em>{sender_title}</em></p>
+        <p style="margin-top: 0; margin-bottom: 0;"><a href="https://solusiai.id">solusiai.id</a></p>
+        {f'<p style="margin-top: 0;"><a href="{sender_linkedin}">Profil LinkedIn</a></p>' if sender_linkedin else ""}
+    </div>
+    """.strip()
 
 # --- Halaman & Fungsi Utama ---
 
@@ -98,7 +110,7 @@ def get_data_based_on_role():
         activities, prospects, profiles = db.get_all_marketing_activities(), db.get_all_prospect_research(), db.get_all_profiles()
     elif role == 'manager':
         activities, prospects, profiles = db.get_team_marketing_activities(user.id), db.get_team_prospect_research(user.id), db.get_team_profiles(user.id)
-    else: # marketing
+    else:
         activities, prospects, profiles = db.get_marketing_activities_by_user_id(user.id), db.get_prospect_research_by_marketer(user.id), [profile]
     return activities, prospects, profiles
 
@@ -272,8 +284,6 @@ def show_followup_section(activity):
                 success, msg = db.add_followup(activity['id'], st.session_state.user.id, st.session_state.profile.get('full_name'), notes, next_action, next_followup_date, interest_level, REVERSE_STATUS_MAPPING[new_status_display])
                 if success: st.success(msg); st.rerun()
                 else: st.error(msg)
-
-# GANTI TOTAL FUNGSI page_prospect_research DENGAN YANG INI
 
 def page_prospect_research():
     st.title("Riset Prospek 🔍💼")

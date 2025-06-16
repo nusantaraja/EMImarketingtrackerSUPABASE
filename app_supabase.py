@@ -353,6 +353,8 @@ def show_followup_section(activity):
 
 
 # --- Riset Prospek ---
+d# GANTI SELURUH FUNGSI INI DI app_supabase.py
+
 def page_prospect_research():
     st.title("Riset Prospek 🔍💼")
     _, prospects, _ = get_data_based_on_role()
@@ -386,6 +388,7 @@ def page_prospect_research():
     selected_id = st.selectbox("Pilih prospek:", options.keys(), format_func=lambda x: options[x], index=0)
 
     if selected_id == 0:
+        # Form Tambah Prospek (Sudah Benar)
         with st.form("prospect_form"):
             st.subheader("Form Tambah Prospek Baru")
             col1, col2 = st.columns(2)
@@ -418,12 +421,45 @@ def page_prospect_research():
     else:
         prospect = db.get_prospect_by_id(selected_id)
         if prospect:
+            # === INI BAGIAN FORM EDIT PROSPEK YANG DIKEMBALIKAN UTUH ===
             with st.form("edit_prospect_form"):
                 st.subheader(f"Edit Prospek: {prospect.get('company_name')}")
-                # ... (Form edit lengkap di sini) ...
+                col1, col2 = st.columns(2)
+                with col1:
+                    company_name = st.text_input("Nama Perusahaan*", value=prospect.get('company_name'))
+                    website = st.text_input("Website", value=prospect.get('website'))
+                    industry = st.text_input("Industri", value=prospect.get('industry'))
+                    founded_year = st.number_input("Tahun Berdiri", min_value=1900, max_value=datetime.now().year, step=1, value=prospect.get('founded_year') or 1900)
+                    company_size = st.text_input("Jumlah Karyawan", value=prospect.get('company_size'))
+                    revenue = st.text_input("Pendapatan Tahunan", value=prospect.get('revenue'))
+                with col2:
+                    contact_name = st.text_input("Nama Kontak", value=prospect.get('contact_name'))
+                    contact_title = st.text_input("Jabatan", value=prospect.get('contact_title'))
+                    contact_email = st.text_input("Email", value=prospect.get('contact_email'))
+                    linkedin_url = st.text_input("LinkedIn URL", value=prospect.get('linkedin_url'))
+                    phone = st.text_input("Nomor Telepon", value=prospect.get('phone'))
+                    location = st.text_input("Lokasi Kantor", value=prospect.get('location'))
+
+                st.subheader("Detail Tambahan")
+                notes = st.text_area("Catatan", value=prospect.get('notes', ''))
+                next_step = st.text_input("Langkah Lanjutan", value=prospect.get('next_step', ''))
+                next_step_date = st.date_input("Tanggal Follow-up", value=str_to_date(prospect.get('next_step_date')))
+                status = st.selectbox("Status Prospek", ["baru", "dalam_proses", "berhasil", "gagal"], index=["baru", "dalam_proses", "berhasil", "gagal"].index(prospect.get('status', 'baru')))
+                source = st.text_input("Sumber Prospek", value=prospect.get('source', 'manual'))
+
                 if st.form_submit_button("Simpan Perubahan"):
-                    # ... (Logika simpan perubahan di sini) ...
-                    pass
+                    if not company_name:
+                        st.error("Nama perusahaan wajib diisi!")
+                    else:
+                        success, msg = db.edit_prospect_research(
+                            prospect_id=selected_id, company_name=company_name, website=website, industry=industry, founded_year=founded_year,
+                            company_size=company_size, revenue=revenue, location=location, contact_name=contact_name, contact_title=contact_title,
+                            contact_email=contact_email, linkedin_url=linkedin_url, phone=phone, notes=notes, next_step=next_step,
+                            next_step_date=date_to_str(next_step_date), status=status, source=source
+                        )
+                        if success: st.success(msg); st.rerun()
+                        else: st.error(msg)
+            # ==========================================================
 
             st.divider()
             st.subheader("Template Email Profesional")
@@ -446,6 +482,8 @@ def page_prospect_research():
 
 
 # --- Manajemen Pengguna ---
+# GANTI SELURUH FUNGSI INI DI app_supabase.py
+
 def page_user_management():
     st.title("Manajemen Pengguna")
     user = st.session_state.user
@@ -464,6 +502,7 @@ def page_user_management():
         else: st.info("Belum ada pengguna terdaftar.")
     with tab2:
         st.subheader("Form Tambah Pengguna Baru")
+        # === INI BAGIAN FORM TAMBAH USER YANG DIKEMBALIKAN UTUH ===
         with st.form("add_user_form"):
             full_name = st.text_input("Nama Lengkap")
             email = st.text_input("Email")
@@ -475,16 +514,20 @@ def page_user_management():
                 if profile.get('role') == 'superadmin':
                     managers = db.get_all_managers()
                     if not managers: st.warning("Belum ada Manajer. Buat user dengan role 'manager' terlebih dahulu.")
-                    else: manager_id = st.selectbox("Pilih Manajer", {mgr['id']: mgr['full_name'] for mgr in managers})
-                else:
+                    else:
+                        manager_options = {mgr['id']: mgr['full_name'] for mgr in managers}
+                        manager_id = st.selectbox("Pilih Manajer", options=manager_options.keys(), format_func=lambda x: manager_options[x])
+                else: # Manager yg login
                     manager_id = user.id
                     st.info(f"Anda ({profile.get('full_name')}) akan menjadi manajer untuk pengguna baru ini.")
+            
             if st.form_submit_button("Daftarkan Pengguna Baru"):
                 if not all([full_name, email, password]): st.error("Semua field wajib diisi!")
                 else:
                     new_user, error = db.create_user_as_admin(email, password, full_name, role, manager_id)
                     if new_user: st.success(f"Pengguna {full_name} berhasil didaftarkan."); st.rerun()
                     else: st.error(f"Gagal mendaftarkan: {error}")
+        # ========================================================
 
 
 # --- Pengaturan Aplikasi ---

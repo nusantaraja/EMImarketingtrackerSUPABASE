@@ -1,4 +1,4 @@
-# --- START OF FILE db_supabase.py (Versi Perbaikan Error) ---
+# --- START OF FILE db_supabase.py (Versi Perbaikan Error Final) ---
 
 import streamlit as st
 from supabase import create_client, Client
@@ -50,16 +50,16 @@ def get_profile(user_id):
 def get_all_profiles():
     supabase = init_connection()
     try:
-        # DIGANTI: Mengurutkan berdasarkan full_name, bukan created_at
-        return supabase.from_("profiles").select("*, manager:manager_id(full_name)").order("full_name", asc=True).execute().data
+        # PERBAIKAN: Menggunakan 'ascending=True' bukan 'asc=True'
+        return supabase.from_("profiles").select("*, manager:manager_id(full_name)").order("full_name", ascending=True).execute().data
     except Exception as e:
         st.error(f"Gagal mengambil data pengguna: {e}"); return []
 
 def get_team_profiles(manager_id):
     supabase = init_connection()
     try:
-        # DIGANTI: Mengurutkan berdasarkan full_name, bukan created_at
-        return supabase.from_("profiles").select("*, manager:manager_id(full_name)").or_(f"id.eq.{manager_id},manager_id.eq.{manager_id}").order("full_name", asc=True).execute().data
+        # PERBAIKAN: Menggunakan 'ascending=True' bukan 'asc=True'
+        return supabase.from_("profiles").select("*, manager:manager_id(full_name)").or_(f"id.eq.{manager_id},manager_id.eq.{manager_id}").order("full_name", ascending=True).execute().data
     except Exception as e:
         st.error(f"Gagal mengambil data tim: {e}"); return []
 
@@ -88,6 +88,7 @@ def get_team_marketing_activities(manager_id):
     supabase = init_connection()
     try:
         team_profiles = get_team_profiles(manager_id)
+        if not team_profiles: return []
         team_ids = [p['id'] for p in team_profiles]
         return supabase.from_("marketing_activities").select("*").in_("marketer_id", team_ids).order("created_at", desc=True).execute().data
     except Exception as e:
@@ -158,6 +159,7 @@ def get_team_prospect_research(manager_id):
     supabase = init_connection()
     try:
         team_profiles = get_team_profiles(manager_id)
+        if not team_profiles: return []
         team_ids = [p['id'] for p in team_profiles]
         return supabase.from_("prospect_research").select("*").in_("marketer_id", team_ids).order("created_at", desc=True).execute().data
     except Exception as e:

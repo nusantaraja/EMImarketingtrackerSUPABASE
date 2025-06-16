@@ -43,44 +43,81 @@ def str_to_date(s):
 
 
 # --- Helper Template Email (Kode Asli Dikembalikan Utuh) ---
-def generate_html_email_template(prospect, role=None, industry=None, follow_up_number=None):
-    # Semua kode template asli Anda ada di sini dan tidak diubah
-    # (Saya ambil dari file original Anda)
+# --- GANTI SELURUH FUNGSI INI DI app_supabase.py ---
+
+def generate_html_email_template(prospect, user_profile):
+    """
+    Menghasilkan template email dinamis berdasarkan peran pengguna yang login.
+    """
+    # --- Detail Prospek ---
     contact_name = prospect.get("contact_name", "Bapak/Ibu")
-    company_name = prospect.get("company_name", "Perusahaan")
-    location = prospect.get("location", "Lokasi")
-    next_step = prospect.get("next_step", "baru")
+    company_name = prospect.get("company_name", "Perusahaan Anda")
+    industry = prospect.get("industry", "Anda")
 
-    default_template = f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
-    <h2 style="color: #1f77b4;">Penawaran Solusi untuk {company_name}</h2>
+    # --- Detail Pengirim (Dinamis berdasarkan user_profile) ---
+    sender_name = user_profile.get("full_name")
+    sender_role = user_profile.get("role")
     
-    <p>Halo <strong>{contact_name}</strong>,</p>
+    sender_title = ""
+    sender_linkedin = ""
+    email_body = ""
 
-    <p>Kami melihat bahwa perusahaan Anda, <strong>{company_name}</strong>, sedang dalam tahap <em>{next_step}</em>. Kami menawarkan solusi yang mungkin cocok untuk bisnis Anda.</p>
+    # === LOGIKA UNTUK MEMILIH TEMPLATE BERDASARKAN PERAN ===
 
-    <p>Jika tertarik, silakan hubungi kami via {prospect.get('phone', st.session_state.profile.get('email'))}.</p>
+    # 1. Jika yang login adalah Superadmin (CEO)
+    if sender_role == 'superadmin':
+        sender_title = "Founder & CEO, Solusi AI Indonesia"
+        sender_linkedin = "https://www.linkedin.com/in/iwancahyo/"
+        
+        email_body = f"""
+        <p>Perkenalkan, saya <strong>{sender_name}</strong>, Founder & CEO dari <strong>Solusi AI Indonesia</strong>.</p>
+        <p>Saya melihat <strong>{company_name}</strong> sebagai salah satu pemain kunci di industri {industry}. Di era digital yang sangat kompetitif ini, adopsi teknologi cerdas bukan lagi pilihan, melainkan sebuah keharusan untuk tetap relevan dan unggul.</p>
+        <p>Di Solusi AI, kami membantu perusahaan seperti Anda untuk melakukan transformasi tersebut. Kami tidak hanya menyediakan teknologi, tetapi membangun kemitraan strategis untuk meningkatkan efisiensi operasional dan menciptakan pengalaman pelanggan yang tak terlupakan.</p>
+        <p>Apakah Anda terbuka untuk sebuah diskusi singkat minggu depan? Saya ingin berbagi bagaimana kami bisa merancang solusi AI yang spesifik untuk tantangan dan peluang di <strong>{company_name}</strong>.</p>
+        """
 
-    <br>
-    <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
-    <em>{st.session_state.profile.get("role", "")}</em></p>
+    # 2. Jika yang login adalah Manager
+    elif sender_role == 'manager':
+        sender_title = "AI Solutions Manager, Solusi AI Indonesia"
+        # Manajer bisa menambahkan LinkedIn mereka di profil nanti jika perlu
+        
+        email_body = f"""
+        <p>Perkenalkan, saya <strong>{sender_name}</strong>, AI Solutions Manager dari <strong>Solusi AI Indonesia</strong>.</p>
+        <p>CEO kami, Iwan Cahyo, menugaskan saya untuk menjangkau perusahaan-perusahaan potensial seperti <strong>{company_name}</strong> yang dapat meraih manfaat signifikan dari teknologi AI.</p>
+        <p>Tim kami berspesialisasi dalam menganalisis alur kerja bisnis untuk mengidentifikasi area di mana AI dapat memberikan dampak terbesar, mulai dari otomatisasi layanan pelanggan dengan Chatbot hingga analisis data untuk pengambilan keputusan yang lebih baik.</p>
+        <p>Saya ingin mengundang Anda untuk sesi konsultasi 30 menit tanpa komitmen, di mana kita bisa mendiskusikan tantangan spesifik di tim Anda dan memetakan potensi solusi AI yang paling efektif.</p>
+        """
+        
+    # 3. Jika yang login adalah Marketing (Default)
+    else:
+        sender_title = "Business Development, Solusi AI Indonesia"
+        
+        email_body = f"""
+        <p>Saya <strong>{sender_name}</strong> dari tim Business Development di <strong>Solusi AI Indonesia</strong>.</p>
+        <p>Apakah tim Anda di <strong>{company_name}</strong> menghabiskan banyak waktu menjawab pertanyaan pelanggan yang berulang? Bayangkan jika 80% dari interaksi tersebut dapat ditangani secara otomatis, 24/7, oleh AI Chatbot yang cerdas.</p>
+        <p>Ini akan membebaskan waktu tim Anda untuk fokus pada masalah yang lebih kompleks dan penting. Kami memiliki studi kasus di industri {industry} yang menunjukkan peningkatan kepuasan pelanggan sebesar 40% setelah implementasi.</p>
+        <p>Saya bisa siapkan demo singkat 15 menit untuk menunjukkan cara kerjanya secara langsung. Apakah hari Selasa atau Kamis sore pekan ini cocok untuk Anda?</p>
+        """
 
-    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
-    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
-</div>"""
+    # --- Gabungkan Semua Bagian Menjadi Email Lengkap ---
+    
+    full_html = f"""
+    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <p>Yth. Bapak/Ibu <strong>{contact_name}</strong>,</p>
+        
+        {email_body}
 
-    if role:
-        # ... (Sisa kode template asli Anda tetap dipertahankan)
-        pass
-
-    if industry:
-        # ... (Sisa kode template asli Anda tetap dipertahankan)
-        pass
-
-    if follow_up_number:
-        # ... (Sisa kode template asli Anda tetap dipertahankan)
-        pass
-
-    return default_template.strip()
+        <p>Terima kasih atas waktu dan perhatian Anda.</p>
+        <br>
+        <p>Hormat saya,</p>
+        <p style="margin-bottom: 0;"><strong>{sender_name}</strong></p>
+        <p style="margin-top: 0; margin-bottom: 0;"><em>{sender_title}</em></p>
+        <p style="margin-top: 0; margin-bottom: 0;"><a href="https://solusiai.id">solusiai.id</a></p>
+        {f'<p style="margin-top: 0;"><a href="{sender_linkedin}">Profil LinkedIn</a></p>' if sender_linkedin else ""}
+    </div>
+    """
+    
+    return full_html.strip()
 
 
 # --- Halaman Login ---

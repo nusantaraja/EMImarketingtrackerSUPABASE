@@ -33,10 +33,12 @@ def sign_in(email, password):
 def sign_up(email, password, full_name, role):
     supabase = init_connection()
     try:
+        # Langkah 1: Daftarkan user ke Supabase Auth
         response = supabase.auth.sign_up({"email": email, "password": password})
         user = response.user
 
         if user:
+            # Langkah 2: Simpan data profil ke tabel 'profiles'
             profile_data = {
                 "id": user.id,
                 "full_name": full_name,
@@ -45,7 +47,9 @@ def sign_up(email, password, full_name, role):
             }
             supabase.from_("profiles").insert(profile_data).execute()
 
-        return user, None
+            return user, None
+        else:
+            return None, "Gagal membuat akun pengguna."
     except Exception as e:
         error_message = str(e.args[0]['message']) if e.args and isinstance(e.args[0], dict) else str(e)
         return None, error_message
@@ -66,6 +70,7 @@ def page_user_management():
     tab1, tab2 = st.tabs(["Daftar Pengguna", "Tambah Pengguna Baru"])
 
     with tab1:
+        st.subheader("Daftar Pengguna Terdaftar")
         profiles = get_all_profiles()
         if profiles:
             df = pd.DataFrame(profiles).rename(columns={'id': 'User ID', 'full_name': 'Nama Lengkap', 'role': 'Role', 'email': 'Email'})
@@ -74,20 +79,22 @@ def page_user_management():
             st.info("Belum ada pengguna terdaftar.")
 
     with tab2:
-        full_name = st.text_input("Nama Lengkap")
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-        role = st.selectbox("Role", ["superadmin", "manager", "marketing", "sales", "cfo", "finance", "it", "tech", "engineer"])
-        if st.button("Daftarkan Pengguna Baru"):
-            if not all([full_name, email, password]):
-                st.error("Semua field wajib diisi!")
-            else:
-                user, error = sign_up(email, password, full_name, role)
-                if user:
-                    st.success(f"Pengguna {full_name} berhasil didaftarkan.")
-                    st.rerun()
+        st.subheader("Form Tambah Pengguna Baru")
+        with st.form("signup_form"):
+            full_name = st.text_input("Nama Lengkap")
+            email = st.text_input("Email")
+            password = st.text_input("Password", type="password")
+            role = st.selectbox("Role", ["marketing", "superadmin", "manager"])
+            if st.form_submit_button("Daftarkan Pengguna Baru"):
+                if not all([full_name, email, password]):
+                    st.error("Semua field wajib diisi!")
                 else:
-                    st.error(f"Gagal mendaftarkan: {error}")
+                    user, error = sign_up(email, password, full_name, role)
+                    if user:
+                        st.success(f"Pengguna {full_name} berhasil didaftarkan.")
+                        st.rerun()
+                    else:
+                        st.error(f"Gagal mendaftarkan: {error}")
 
 
 def get_all_profiles():

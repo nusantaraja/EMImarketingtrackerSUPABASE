@@ -28,17 +28,36 @@ def sign_in(email, password):
         return None, error_message
 
 def create_user_as_admin(email, password, full_name, role, manager_id=None):
+    """
+    Membuat pengguna di Supabase Auth dan menyisipkan profilnya di tabel 'profiles'.
+    Memerlukan hak akses admin (service_role key).
+    """
     supabase = init_connection()
     try:
-        response = supabase.auth.admin.create_user({"email": email, "password": password, "email_confirm": True})
+        # Langkah 1: Buat pengguna di sistem otentikasi Supabase
+        response = supabase.auth.admin.create_user({
+            "email": email,
+            "password": password,
+            "email_confirm": True  # Langsung konfirmasi email
+        })
         user = response.user
         if user:
-            profile_data = {"id": user.id, "full_name": full_name, "role": role, "email": email, "manager_id": manager_id}
+            # Langkah 2: Buat profil untuk pengguna baru di tabel 'profiles'
+            profile_data = {
+                "id": user.id,
+                "full_name": full_name,
+                "role": role,
+                "email": email,
+                "manager_id": manager_id
+            }
             supabase.from_("profiles").insert(profile_data).execute()
         return user, None
     except Exception as e:
+        # Memberikan pesan error yang lebih jelas
         error_message = str(e.args[0]['message']) if e.args and isinstance(e.args[0], dict) else str(e)
-        return None, "Pengguna dengan email ini sudah terdaftar." if "User already exists" in error_message else error_message
+        if "User already exists" in error_message:
+            return None, "Pengguna dengan email ini sudah terdaftar."
+        return None, error_message
 
 def get_profile(user_id):
     supabase = init_connection()
@@ -48,20 +67,25 @@ def get_profile(user_id):
 
 # --- Manajemen Pengguna ---
 def get_all_profiles():
+    """Mengambil semua profil dan data manajer mereka jika ada."""
     supabase = init_connection()
     try:
-        return supabase.from_("profiles").select("*, manager:manager_id(full_name)").execute().data
+        # Menggunakan join untuk mengambil nama lengkap manajer
+        return supabase.from_("profiles").select("*, manager:manager_id(full_name)").order("created_at", desc=True).execute().data
     except Exception as e:
         st.error(f"Gagal mengambil data pengguna: {e}"); return []
 
 def get_team_profiles(manager_id):
+    """Mengambil profil manajer dan semua anggota tim di bawahnya."""
     supabase = init_connection()
     try:
-        return supabase.from_("profiles").select("*, manager:manager_id(full_name)").or_(f"id.eq.{manager_id},manager_id.eq.{manager_id}").execute().data
+        # Mengambil profil manajer itu sendiri DAN semua user yang manager_id-nya adalah dia
+        return supabase.from_("profiles").select("*, manager:manager_id(full_name)").or_(f"id.eq.{manager_id},manager_id.eq.{manager_id}").order("created_at", desc=True).execute().data
     except Exception as e:
         st.error(f"Gagal mengambil data tim: {e}"); return []
 
 def get_all_managers():
+    """Mengambil daftar semua pengguna dengan role 'manager'."""
     supabase = init_connection()
     try:
         return supabase.from_("profiles").select("id, full_name").eq("role", "manager").execute().data
@@ -127,6 +151,10 @@ def get_followups_by_activity_id(activity_id):
 def add_followup(activity_id, marketer_id, marketer_username, notes, next_action, next_followup_date, interest_level, status_update):
     supabase = init_connection()
     try:
+        # Helper function untuk mengubah date object ke string
+        def date_to_str(dt):
+            return dt.strftime("%Y-%m-%d") if isinstance(dt, datetime.date) else dt
+
         supabase.from_("marketing_activities").update({"status": status_update}).eq("id", activity_id).execute()
         data = {"activity_id": activity_id, "marketer_id": marketer_id, "marketer_username": marketer_username, "notes": notes, "next_action": next_action, "next_followup_date": date_to_str(next_followup_date), "interest_level": interest_level}
         supabase.from_("followups").insert(data).execute()
@@ -192,15 +220,29 @@ def search_prospect_research(keyword):
 def sync_prospect_from_apollo(query):
     url = "https://api.apollo.io/v1/mixed_people_search"
     headers = {"Content-Type": "application/json", "Cache-Control": "no-cache", "X-Api-Key": st.secrets["apollo"]["api_key"]}
-    payload = {"query": query, "page": 1, "page_size": 10}
+    payload = {"query": query, "page": 1, "per_page": 10} # 'page_size' diganti 'per_page' untuk Apollo API
     try:
         response = requests.post(url, json=payload, headers=headers)
         if response.status_code == 200:
             people, prospects = response.json().get("people", []), []
             for person in people:
-                org, contact = person.get("organization", {}), person.get("contact", {})
-                prospect_data = { "company_name": org.get("name"), "website": org.get("website_url"), "industry": org.get("industry_tag"), "contact_name": contact.get("full_name"), "contact_title": contact.get("title"), "contact_email": contact.get("email"), "marketer_id": st.session_state.user.id, "marketer_username": st.session_state.profile.get("full_name") }
-                prospects.append(prospect_data)
+                org = person.get("organization", {}) or {}
+                contact = person.get("contact", {}) or {}
+                prospect_data = {
+                    "company_name": org.get("name"), 
+                    "website": org.get("website_url"), 
+                    "industry": org.get("industry"),
+                    "location": person.get("city", "") + ", " + person.get("state", ""),
+                    "contact_name": person.get("name"), 
+                    "contact_title": person.get("title"), 
+                    "contact_email": person.get("email"),
+                    "linkedin_url": person.get("linkedin_url"),
+                    "source": "apollo",
+                    "status": "baru",
+                    "marketer_id": st.session_state.user.id,
+                    "marketer_username": st.session_state.profile.get("full_name")
+                }
+                prospects.append({k: v for k, v in prospect_data.items() if v is not None}) # Hapus nilai None
             return prospects
         else:
             st.error(f"Gagal mengambil data dari Apollo.io: {response.text}"); return []
@@ -231,25 +273,49 @@ def save_email_template_to_prospect(prospect_id, template_html):
     except Exception as e: return False, f"Gagal menyimpan template: {e}"
 
 def refresh_zoho_token():
-    url, payload = "https://accounts.zoho.com/oauth/v2/token", {"grant_type": "refresh_token", "client_id": st.secrets["zoho"]["client_id"], "client_secret": st.secrets["zoho"]["client_secret"], "refresh_token": st.secrets["zoho"].get("refresh_token", "")}
+    url = "https://accounts.zoho.com/oauth/v2/token"
+    payload = {
+        "grant_type": "refresh_token",
+        "client_id": st.secrets["zoho"]["client_id"],
+        "client_secret": st.secrets["zoho"]["client_secret"],
+        "refresh_token": st.secrets["zoho"].get("refresh_token", "")
+    }
     try:
         response = requests.post(url, data=payload)
-        if response.status_code == 200:
-            tokens = response.json()
-            # Ini tidak akan berfungsi di Streamlit Cloud, tapi kita coba saja
-            st.secrets["zoho"]["access_token"] = tokens.get("access_token", "")
+        response.raise_for_status() # Raise HTTPError for bad responses
+        tokens = response.json()
+        if "access_token" in tokens:
+            # Perhatian: Ini tidak akan mengubah secrets di Streamlit Cloud secara permanen.
+            # Ini hanya akan bekerja selama sesi aplikasi berjalan.
+            st.secrets["zoho"]["access_token"] = tokens["access_token"]
             return True, "Token berhasil diperbarui!"
-        else: return False, f"Gagal memperbarui token: {response.text}"
-    except Exception as e: return False, f"Error saat refresh token: {e}"
+        else:
+            return False, f"Gagal memperbarui token: {response.text}"
+    except requests.exceptions.RequestException as e:
+        return False, f"Error saat refresh token: {e}"
 
 def send_email_via_zoho(email_data):
-    url = "https://mail.zoho.com/api/v1/messages"
+    # Dapatkan akun pengirim dari secrets Zoho
+    sender_account_id = st.secrets["zoho"].get("account_id")
+    if not sender_account_id:
+        return False, "account_id tidak ditemukan di konfigurasi Zoho secrets."
+    
+    url = f"https://mail.zoho.com/api/v1/accounts/{sender_account_id}/messages"
+
     def attempt_send():
-        headers = {"Authorization": f"Zoho-oauthtoken {st.secrets['zoho']['access_token']}", "Content-Type": "application/json"}
-        payload = {"from": {"address": email_data["from"]}, "to": [{"address": email_data["to"]}], "subject": email_data["subject"], "content": [{"type": "text/html", "content": email_data["content"]}]}
+        headers = {"Authorization": f"Zoho-oauthtoken {st.secrets['zoho']['access_token']}"}
+        payload = {
+            "fromAddress": email_data["from"],
+            "to": [{"emailAddress": email_data["to"]}],
+            "subject": email_data["subject"],
+            "content": email_data["content"],
+            "mailFormat": "html"
+        }
         return requests.post(url, json=payload, headers=headers)
+    
     try:
         response = attempt_send()
+        
         if response.status_code == 401:
             st.info("Access token Zoho kedaluwarsa. Mencoba me-refresh...")
             refresh_success, refresh_msg = refresh_zoho_token()
@@ -257,20 +323,38 @@ def send_email_via_zoho(email_data):
                 st.info("Token berhasil diperbarui. Mencoba mengirim email lagi...")
                 response = attempt_send()
             else:
-                return False, f"Gagal me-refresh token: {refresh_msg}"
-        if response.status_code in [200, 202]: return True, "Email berhasil dikirim!"
-        else: return False, f"Gagal kirim email: {response.text}"
-    except Exception as e: return False, f"Error saat kirim email: {e}"
+                return False, f"Gagal me-refresh token. Silakan generate ulang di halaman Pengaturan. Detail: {refresh_msg}"
+
+        if response.status_code == 200:
+            return True, "Email berhasil dikirim!"
+        else:
+            return False, f"Gagal kirim email. Status: {response.status_code}, Pesan: {response.text}"
+    except Exception as e:
+        return False, f"Error saat kirim email: {e}"
 
 def exchange_code_for_tokens(code):
-    url, payload = "https://accounts.zoho.com/oauth/v2/token", {"code": code, "client_id": st.secrets["zoho"]["client_id"], "client_secret": st.secrets["zoho"]["client_secret"], "grant_type": "authorization_code", "redirect_uri": st.secrets["zoho"].get("redirect_uri", "https://emimtsupabase.streamlit.app/")}
+    url = "https://accounts.zoho.com/oauth/v2/token"
+    payload = {
+        "code": code,
+        "client_id": st.secrets["zoho"]["client_id"],
+        "client_secret": st.secrets["zoho"]["client_secret"],
+        "grant_type": "authorization_code",
+        "redirect_uri": st.secrets["zoho"].get("redirect_uri", "https://emimtsupabase.streamlit.app/")
+    }
     try:
         response = requests.post(url, data=payload)
-        if response.status_code == 200:
-            tokens = response.json()
-            # Ini tidak akan berfungsi di Streamlit Cloud, tapi kita coba saja
-            st.secrets["zoho"]["access_token"] = tokens.get("access_token", "")
-            if "refresh_token" in tokens: st.secrets["zoho"]["refresh_token"] = tokens.get("refresh_token", "")
-            return True, "Token berhasil digenerate!"
-        else: return False, f"Gagal mendapatkan token: {response.text}"
-    except Exception as e: return False, f"Error: {e}"
+        response.raise_for_status()
+        tokens = response.json()
+        
+        if "access_token" in tokens:
+            # Sama seperti refresh, ini hanya untuk sesi ini.
+            # Pengguna HARUS menyimpan refresh_token secara manual di secrets.
+            st.secrets["zoho"]["access_token"] = tokens.get("access_token")
+            if "refresh_token" in tokens:
+                st.secrets["zoho"]["refresh_token"] = tokens.get("refresh_token")
+                st.info(f"Refresh Token Baru: {tokens.get('refresh_token')}. HARAP SIMPAN INI di secrets Streamlit Anda.")
+            return True, "Token berhasil digenerate! Pastikan untuk menyimpan refresh_token baru jika ada."
+        else:
+            return False, f"Gagal mendapatkan token: {response.text}"
+    except requests.exceptions.RequestException as e:
+        return False, f"Error: {e}"

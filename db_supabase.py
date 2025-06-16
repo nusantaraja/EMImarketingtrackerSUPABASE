@@ -63,6 +63,26 @@ def get_profile(user_id):
     except Exception:
         return None
 
+def add_user(email, password, full_name, role):
+    supabase = init_connection()
+    try:
+        response = supabase.auth.sign_up({"email": email, "password": password})
+        user = response.user
+
+        if user:
+            profile_data = {
+                "id": user.id,
+                "full_name": full_name,
+                "role": role,
+                "email": email
+            }
+            supabase.from_("profiles").insert(profile_data).execute()
+
+        return user, None
+    except Exception as e:
+        error_message = str(e.args[0]['message']) if e.args and isinstance(e.args[0], dict) else str(e)
+        return None, error_message
+
 
 # --- Manajemen Pengguna (Superadmin Only) ---
 def page_user_management():
@@ -82,7 +102,7 @@ def page_user_management():
         full_name = st.text_input("Nama Lengkap")
         email = st.text_input("Email")
         password = st.text_input("Password", type="password")
-        role = st.selectbox("Role", ["marketing", "superadmin"])
+        role = st.selectbox("Role", ["superadmin", "manager", "marketing", "sales", "cfo", "finance", "it", "tech", "engineer"])
         if st.button("Daftarkan Pengguna Baru"):
             if not all([full_name, email, password]):
                 st.error("Semua field wajib diisi!")

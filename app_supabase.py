@@ -45,6 +45,7 @@ def get_professional_role(role):
     """Map role ke tampilan profesional"""
     role_mapping = {
         "superadmin": "CEO/Founder",
+        "manager": "Manager",
         "marketing": "Marketing Manager",
         "sales": "Sales Executive",
         "cfo": "Chief Financial Officer",

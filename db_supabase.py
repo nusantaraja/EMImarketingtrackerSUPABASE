@@ -33,7 +33,7 @@ def sign_in(email, password):
 def get_profile(user_id):
     supabase = init_connection()
     try:
-        response = supabase.from_("profiles").select("*").eq("id", user_id).single().execute()
+        response = supabase.from_("profiles").select("*").eq("id", str(user_id)).single().execute()
         return response.data
     except Exception:
         return None
@@ -164,38 +164,3 @@ def delete_marketing_activity(activity_id):
         return True, "Aktivitas berhasil dihapus!"
     except Exception as e:
         return False, f"Gagal menghapus aktivitas: {e}"
-
-# --- Follow-up CRUD ---
-def get_followups_by_activity_id(activity_id):
-    supabase = init_connection()
-    try:
-        response = supabase.from_("followups").select("*").eq("activity_id", str(activity_id)).order("created_at", desc=True).execute()
-        return response.data
-    except Exception as e:
-        st.error(f"Error mengambil data follow-up: {e}")
-        return []
-
-
-def add_followup(activity_id, marketer_id, marketer_username, notes, next_action, next_followup_date, interest_level, status_update):
-    supabase = init_connection()
-    try:
-        # Update status utama
-        supabase.from_("marketing_activities").update({"status": status_update}).eq("id", str(activity_id)).execute()
-
-        # Format tanggal follow-up
-        next_followup_date_str = next_followup_date.strftime("%Y-%m-%d") if next_followup_date else None
-
-        data_to_insert = {
-            "activity_id": str(activity_id),
-            "marketer_id": marketer_id,
-            "marketer_username": marketer_username,
-            "notes": notes,
-            "next_action": next_action,
-            "next_followup_date": next_followup_date_str,
-            "interest_level": interest_level
-        }
-
-        response = supabase.from_("followups").insert(data_to_insert).execute()
-        return True, "Follow-up berhasil ditambahkan."
-    except Exception as e:
-        return False, f"Gagal menambahkan follow-up: {e}"

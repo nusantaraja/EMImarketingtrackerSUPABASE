@@ -57,7 +57,7 @@ def get_professional_role(role):
     return role_mapping.get(role.lower(), role.capitalize())
 
 
-# --- Helper Template Email ---
+# --- Template Email Dinamis ---
 def generate_html_email_template(prospect, role=None, industry=None, follow_up_number=None):
     contact_name = prospect.get("contact_name", "Bapak/Ibu")
     company_name = prospect.get("company_name", "Perusahaan")
@@ -118,9 +118,11 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
     </ul>
     <p>Dengan solusi ini, Anda bisa mengurangi biaya operasional hingga <strong>40%</strong> tanpa mengorbankan engagement pelanggan.</p>
     <p>Jika tertarik, saya siap bantu Anda lihat simulasi efisiensi biaya yang bisa dicapai melalui demo singkat.</p>
+
     <br>
     <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
     <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
+
     <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
     <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
 </div>""".strip()
@@ -131,9 +133,11 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
     <p>Halo <strong>{contact_name}</strong>,</p>
     <p>Berdasarkan riset kami, <strong>{company_name}</strong> menggunakan teknologi {', '.join(prospect.get("technology_used", ["Tidak ada"]))}. Kami menawarkan integrasi sistem berbasis AI Voice yang bisa langsung digunakan oleh tim IT Anda.</p>
     <p>Jika tertarik, silakan balas email ini atau kontak saya via {prospect.get('phone', '')}.</p>
+
     <br>
     <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
     <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
+
     <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
     <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
 </div>""".strip()
@@ -147,9 +151,11 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
     <p>Halo <strong>{contact_name}</strong>,</p>
     <p>Kami percaya bahwa solusi IT & AI Voice kami sangat cocok untuk perusahaan Anda di industri teknologi informasi.</p>
     <p>Jika tertarik, silakan balas email ini atau kontak saya via {prospect.get('phone', '')}.</p>
+
     <br>
     <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
     <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
+
     <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
     <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
 </div>""".strip()
@@ -160,9 +166,11 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
     <p>Halo <strong>{contact_name}</strong>,</p>
     <p>Kami menemukan bahwa <strong>{company_name}</strong> berada di industri kesehatan. Kami punya solusi digital berbasis AI Voice untuk meningkatkan efisiensi operasional rumah sakit/klinik Anda.</p>
     <p>Silakan balas email ini untuk diskusi lebih lanjut.</p>
+
     <br>
     <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
     <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
+
     <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
     <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
 </div>""".strip()
@@ -180,9 +188,11 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
         <li>Lacak respons pelanggan secara real-time</li>
     </ul>
     <p>Silakan balas email ini untuk diskusi lebih lanjut.</p>
+
     <br>
     <p><strong>{st.session_state.profile.get("full_name", "Tim EMI")}</strong><br>
     <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
+
     <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
     <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
 </div>""".strip()
@@ -212,9 +222,11 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
         <li>Integrasikan dengan sistem billing/CRM Anda</li>
     </ul>
     <p>Jika ada pertanyaan atau butuh info lebih lanjut, jangan ragu untuk balas email ini.</p>
+
     <br>
     <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
     <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
+
     <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
     <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
 </div>""".strip()
@@ -225,9 +237,11 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
     <p>Halo <strong>{contact_name}</strong>,</p>
     <p>Kami belum mendapat respons terkait penawaran sebelumnya. Apakah masih tertarik dengan solusi AI Voice untuk {company_name}? Kami bisa bantu Anda meningkatkan efisiensi dan skalabilitas bisnis Anda.</p>
     <p>Silakan balas email ini atau kontak saya via {prospect.get('phone', st.session_state.profile.get('email'))}.</p>
+
     <br>
     <p><strong>{st.session_state.profile.get("full_name", "Tim EMI")}</strong><br>
     <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
+
     <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
     <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
 </div>""".strip()
@@ -858,7 +872,7 @@ def get_authorization_url():
         "response_type": "code",
         "client_id": st.secrets["zoho"]["client_id"],
         "scope": "ZohoMail.send,ZohoMail.read",
-        "redirect_uri": st.secrets["zoho"].get("redirect_uri", "https://emimtsupabase.streamlit.app/oauth/callback") 
+        "redirect_uri": st.secrets["zoho"].get("redirect_uri", "https://emimtsupabase.streamlit.app/") 
     }
     base_url = "https://accounts.zoho.com/oauth/v2/auth?"
     return base_url + urlencode(params)

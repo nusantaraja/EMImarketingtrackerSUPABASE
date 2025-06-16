@@ -460,7 +460,7 @@ def page_prospect_research():
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("Preview Email"):
-                    st.markdown(edited_html, unsafe_allow_html=True)
+                   st.write(edited_html, unsafe_allow_html=True)
             with col2:
                 if st.button("Simpan Template ke Prospek"):
                     success, msg = db.save_email_template_to_prospect(prospect_id=selected_id, template_html=edited_html)

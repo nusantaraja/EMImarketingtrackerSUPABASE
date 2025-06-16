@@ -131,7 +131,7 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
             return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
     <h2 style="color: #17becf;">Teknologi Informasi untuk {company_name}</h2>
     <p>Halo <strong>{contact_name}</strong>,</p>
-    <p>Berdasarkan riset kami, <strong>{company_name}</strong> menggunakan teknologi {', '.join(prospect.get("technology_used", ["Tidak ada"]))}. Kami menawarkan integrasi sistem berbasis AI Voice yang bisa langsung digunakan oleh tim IT Anda.</p>
+    <p>Berdasukasi riset kami, <strong>{company_name}</strong> menggunakan teknologi {', '.join(prospect.get("technology_used", ["Tidak ada"]))}. Kami menawarkan integrasi sistem berbasis AI Voice yang bisa langsung digunakan oleh tim IT Anda.</p>
     <p>Jika tertarik, silakan balas email ini atau kontak saya via {prospect.get('phone', '')}.</p>
 
     <br>
@@ -616,7 +616,7 @@ def page_prospect_research():
 
     df = pd.DataFrame(filtered_prospects)
 
-    # Cek apakah kolom status tersedia
+    # Cek kolom status
     if 'status' not in df.columns:
         st.error("Kolom 'status' tidak ditemukan di data prospek. Pastikan database memiliki kolom 'status'.")
         st.stop()
@@ -872,7 +872,7 @@ def get_authorization_url():
         "response_type": "code",
         "client_id": st.secrets["zoho"]["client_id"],
         "scope": "ZohoMail.send,ZohoMail.read",
-        "redirect_uri": st.secrets["zoho"].get("redirect_uri", "https://emimtsupabase.streamlit.app/") 
+        "redirect_uri": st.secrets["zoho"].get("redirect_uri", "https://emimtsupabase.streamlit.app/oauth/callback") 
     }
     base_url = "https://accounts.zoho.com/oauth/v2/auth?"
     return base_url + urlencode(params)

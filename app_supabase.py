@@ -16,7 +16,7 @@ STATUS_MAPPING = {'baru': 'Baru', 'dalam_proses': 'Dalam Proses', 'berhasil': 'B
 REVERSE_STATUS_MAPPING = {v: k for k, v in STATUS_MAPPING.items()}
 ACTIVITY_TYPES = ["Presentasi", "Demo Produk", "Follow-up Call", "Email", "Meeting", "Lainnya"]
 
-# --- Helper untuk Waktu & Tanggal ---
+# --- Helper Fungsi Waktu & Tanggal ---
 def convert_to_wib_and_format(iso_string, format_str='%A, %d %b %Y, %H:%M'):
     """Konversi waktu UTC ke WIB"""
     if not iso_string:
@@ -49,191 +49,12 @@ def get_professional_role(role):
         "marketing": "Marketing Manager",
         "sales": "Sales Executive",
         "cfo": "Chief Financial Officer",
-        "finance": "Finance Manager",
+        "finance": "Finance Lead",
         "it": "IT Manager",
         "tech": "Technology Lead",
         "engineer": "Technical Specialist"
     }
     return role_mapping.get(role.lower(), role.capitalize())
-
-
-# --- Helper Template Email ---
-def generate_html_email_template(prospect, role=None, industry=None, follow_up_number=None):
-    contact_name = prospect.get("contact_name", "Bapak/Ibu")
-    company_name = prospect.get("company_name", "Perusahaan")
-    location = prospect.get("location", "Lokasi")
-    next_step = prospect.get("next_step", "baru")
-
-    # --- Default Template ---
-    default_template = f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
-    <h2 style="color: #1f77b4;">Penawaran Solusi AI Voice untuk {company_name}</h2>
-    
-    <p>Halo <strong>{contact_name}</strong>,</p>
-
-    <p>Kami melihat bahwa perusahaan Anda, <strong>{company_name}</strong>, sedang dalam tahap <em>{next_step}</em>. Kami menawarkan solusi berbasis <strong>AI Voice</strong> yang bisa meningkatkan efisiensi operasional dan engagement pelanggan.</p>
-
-    <p>Jika tertarik, silakan hubungi kami via {prospect.get('phone', st.session_state.profile.get('email'))}.</p>
-
-    <br>
-    <p><strong>{st.session_state.profile.get("full_name", "Tim EMI")}</strong><br>
-    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
-
-    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
-    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
-</div>"""
-
-    # --- Template berbasis role ---
-    if role:
-        role = role.lower()
-        if "ceo" in role or "founder" in role:
-            return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
-    <h2 style="color: #1f77b4;">Solusi Strategis untuk {company_name} (CEO)</h2>
-    <p>Halo <strong>{contact_name}</strong>,</p>
-    <p>Saya melihat bahwa perusahaan Anda, <strong>{company_name}</strong>, saat ini sedang dalam tahap <em>{next_step}</em>. Sebagai pemimpin bisnis, apakah Anda tertarik dengan penawaran yang bisa meningkatkan efisiensi operasional dan pengalaman pelanggan secara signifikan?</p>
-    <p><strong>Kami menyediakan teknologi AI Voice</strong> yang memungkinkan bisnis seperti {company_name} melakukan:</p>
-    <ul>
-        <li>Panggilan otomatis dengan suara natural</li>
-        <li>Interaksi pelanggan 24/7 via telepon</li>
-        <li>Integrasi cepat dengan CRM atau sistem internal</li>
-        <li>Analisis percakapan pelanggan untuk optimasi layanan</li>
-    </ul>
-    <p>Apakah Anda tertarik untuk diskusi singkat? Saya siap jelaskan bagaimana solusi ini bisa bekerja untuk bisnis Anda.</p>
-    <br>
-    <p><strong>{st.session_state.profile.get("full_name", "Tim EMI")}</strong><br>
-    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
-    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
-    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
-</div>""".strip()
-
-        elif "cfo" in role or "finance" in role:
-            return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
-    <h2 style="color: #ff7f0e;">Efisiensi Biaya untuk {company_name} (CFO)</h2>
-    <p>Halo <strong>{contact_name}</strong>,</p>
-    <p>Berdasarkan data bisnis Anda di <strong>{company_name}</strong>, kami menemukan bahwa ada potensi besar untuk meningkatkan efisiensi biaya operasional dengan menggunakan teknologi suara AI.</p>
-    <p><strong>AI Voice EMI</strong> membantu perusahaan seperti {company_name} dalam:</p>
-    <ul>
-        <li>Mengotomatisasi panggilan follow-up & reminder tanpa agen telemarketing</li>
-        <li>Meningkatkan konversi kampanye pemasaran via voice messaging</li>
-        <li>Mengurangi kebutuhan tenaga manusia untuk komunikasi awal prospek</li>
-        <li>Integrasi langsung dengan sistem CRM untuk analisis cost-to-acquisition</li>
-    </ul>
-    <p>Dengan solusi ini, Anda bisa mengurangi biaya operasional hingga <strong>40%</strong> tanpa mengorbankan engagement pelanggan.</p>
-    <p>Jika tertarik, saya siap bantu Anda lihat simulasi efisiensi biaya yang bisa dicapai melalui demo singkat.</p>
-    <br>
-    <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
-    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
-    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
-    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
-</div>""".strip()
-
-        elif "it" in role or "tech" in role or "engineer" in role:
-            return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
-    <h2 style="color: #17becf;">Teknologi Informasi untuk {company_name}</h2>
-    <p>Halo <strong>{contact_name}</strong>,</p>
-    <p>Berdasarkan riset kami, <strong>{company_name}</strong> menggunakan teknologi {', '.join(prospect.get("technology_used", ["Tidak ada"]))}. Kami menawarkan integrasi sistem berbasis AI Voice yang bisa langsung digunakan oleh tim IT Anda.</p>
-    <p>Jika tertarik, silakan balas email ini atau kontak saya via {prospect.get('phone', '')}.</p>
-    <br>
-    <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
-    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
-    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
-    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
-</div>""".strip()
-
-    # --- Template berbasis industri ---
-    if industry:
-        industry = industry.lower()
-        if "teknologi" in industry or "tech" in industry:
-            return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
-    <h2 style="color: #17becf;">Teknologi Informasi untuk {company_name}</h2>
-    <p>Halo <strong>{contact_name}</strong>,</p>
-    <p>Kami percaya bahwa solusi IT & AI Voice kami sangat cocok untuk perusahaan Anda di industri teknologi informasi.</p>
-    <p>Jika tertarik, silakan balas email ini atau kontak saya via {prospect.get('phone', '')}.</p>
-    <br>
-    <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
-    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
-    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
-    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
-</div>""".strip()
-
-        elif "kesehatan" in industry or "hospital" in industry or "clinic" in industry:
-            return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
-    <h2 style="color: #2ca02c;">Solusi Digital untuk Rumah Sakit/Klinik</h2>
-    <p>Halo <strong>{contact_name}</strong>,</p>
-    <p>Kami menemukan bahwa <strong>{company_name}</strong> berada di industri kesehatan. Kami punya solusi digital berbasis AI Voice untuk meningkatkan efisiensi operasional rumah sakit/klinik Anda.</p>
-    <p>Silakan balas email ini untuk diskusi lebih lanjut.</p>
-    <br>
-    <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
-    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
-    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
-    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
-</div>""".strip()
-
-        elif "skincare" in industry or "beauty" in industry or "cosmetic" in industry:
-            return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
-    <h2 style="color: #e377c2;">Solusi Digital untuk Bisnis Skincare</h2>
-    <p>Halo <strong>{contact_name}</strong>,</p>
-    <p>Berdasarkan riset kami, <strong>{company_name}</strong> berada di industri skincare. Kami punya solusi <strong>AI Voice</strong> untuk meningkatkan efisiensi operasional dan personalisasi interaksi pelanggan.</p>
-    <p>Dengan teknologi ini, Anda bisa:</p>
-    <ul>
-        <li>Otomatiskan reminder treatment pelanggan</li>
-        <li>Tingkatkan engagement dengan voice campaign personal</li>
-        <li>Minimalkan biaya customer service</li>
-        <li>Lacak respons pelanggan secara real-time</li>
-    </ul>
-    <p>Silakan balas email ini untuk diskusi lebih lanjut.</p>
-    <br>
-    <p><strong>{st.session_state.profile.get("full_name", "Tim EMI")}</strong><br>
-    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
-    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
-    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
-</div>""".strip()
-
-    # --- Template berbasis frekuensi follow-up ---
-    if follow_up_number == 1:
-        return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
-    <h2 style="color: #1f77b4;">Follow-up 1 - Halo {contact_name}, Ini Penawaran dari EMI</h2>
-    <p>Saya menemukan data perusahaan Anda saat riset di industri {industry}. Kami percaya bahwa solusi AI Voice kami sangat cocok untuk bisnis seperti {company_name}.</p>
-    <p>Apakah Anda tertarik untuk diskusi singkat?</p>
-    <br>
-    <p><strong>{st.session_state.profile.get("full_name", "Tim EMI")}</strong><br>
-    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
-    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
-    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
-</div>""".strip()
-
-    elif follow_up_number == 2:
-        return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
-    <h2 style="color: #17becf;">Follow-up 2 - Update Tambahan untuk {company_name}</h2>
-    <p>Halo <strong>{contact_name}</strong>,</p>
-    <p>Sebelumnya, kita sudah sempat komunikasi mengenai solusi digital untuk {company_name}. Sekarang, saya ingin memberikan info tambahan tentang bagaimana <strong>AI Voice</strong> bisa membantu tim Anda:</p>
-    <ul>
-        <li>Personalisasi pesan berdasarkan riwayat interaksi</li>
-        <li>Skalakan ratusan panggilan harian</li>
-        <li>Transkrip percakapan untuk analisis tim sales</li>
-        <li>Integrasikan dengan sistem billing/CRM Anda</li>
-    </ul>
-    <p>Jika ada pertanyaan atau butuh info lebih lanjut, jangan ragu untuk balas email ini.</p>
-    <br>
-    <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
-    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
-    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
-    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
-</div>""".strip()
-
-    elif follow_up_number >= 3:
-        return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
-    <h2 style="color: #d62728;">Follow-up 3 - Penawaran Terakhir</h2>
-    <p>Halo <strong>{contact_name}</strong>,</p>
-    <p>Kami belum mendapat respons terkait penawaran sebelumnya. Apakah masih tertarik dengan solusi AI Voice untuk {company_name}? Kami bisa bantu Anda meningkatkan efisiensi dan skalabilitas bisnis Anda.</p>
-    <p>Silakan balas email ini atau kontak saya via {prospect.get('phone', st.session_state.profile.get('email'))}.</p>
-    <br>
-    <p><strong>{st.session_state.profile.get("full_name", "Tim EMI")}</strong><br>
-    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
-    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
-    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
-</div>""".strip()
-
-    return default_template.strip()
 
 
 # --- Halaman Login ---
@@ -288,7 +109,7 @@ def page_dashboard():
     activities = db.get_all_marketing_activities() if profile.get('role') == 'superadmin' else db.get_marketing_activities_by_user_id(user.id)
 
     if not activities:
-        st.info("Belum ada data aktivitas untuk ditampilkan.")
+        st.info("Belum ada data aktivitas.")
         df = pd.DataFrame()
     else:
         df = pd.DataFrame(activities)
@@ -371,9 +192,9 @@ def page_dashboard():
             st.info("Tidak ada jadwal follow-up dalam 7 hari ke depan.")
 
     # --- Sinkron dari Apollo.io (Superadmin Only) ---
-    st.divider()
-    st.subheader("Sinkron dari Apollo.io")
     if profile.get('role') == 'superadmin':
+        st.divider()
+        st.subheader("Sinkron dari Apollo.io")
         apollo_query = st.text_input("Masukkan query pencarian (misal: industry:Technology AND location:Jakarta)")
         if st.button("Tarik Data dari Apollo.io"):
             with st.spinner("Menarik data dari Apollo.io..."):
@@ -585,10 +406,7 @@ def page_prospect_research():
     user = st.session_state.user
     profile = st.session_state.profile
 
-    if profile.get('role') == 'superadmin':
-        prospects = db.get_all_prospect_research()
-    else:
-        prospects = db.get_prospect_research_by_marketer(user.id)
+    prospects = db.get_all_prospect_research() if profile.get('role') == 'superadmin' else db.get_prospect_research_by_marketer(user.id)
 
     st.subheader("Cari Prospek")
     search_query = st.text_input("Ketik nama perusahaan, kontak, industri, atau lokasi...")
@@ -646,9 +464,13 @@ def page_prospect_research():
             technology_used = st.text_input("Teknologi Digunakan (pisahkan dengan koma)")
             notes = st.text_area("Catatan")
             next_step = st.text_input("Langkah Lanjutan")
+            next_step_db = prospect.get('next_step_date')
+            next_step_ui = str_to_date(next_step_db) if next_step_db else None
             next_step_date = st.date_input("Tanggal Follow-up")
-            status = st.selectbox("Status Prospek", ["baru", "dalam_proses", "berhasil", "gagal"])
-            source = st.text_input("Sumber Prospek", value="manual")
+            status = st.selectbox("Status Prospek", ["baru", "dalam_proses", "berhasil", "gagal"],
+                                 index=["baru", "dalam_proses", "berhasil", "gagal"].index(prospect.get('status', 'baru')))
+            source = st.text_input("Sumber Prospek", value=prospect.get('source', 'manual'))
+
             submitted = st.form_submit_button("Simpan Prospek")
             if submitted:
                 if not company_name or not contact_name:
@@ -774,27 +596,15 @@ def page_prospect_research():
             st.divider()
             st.subheader("Template Email Profesional")
 
-            def get_professional_role(role):
-                """Map role ke tampilan profesional"""
-                role_mapping = {
-                    "superadmin": "CEO/Founder",
-                    "marketing": "Marketing Manager",
-                    "sales": "Sales Executive",
-                    # Tambahkan role lain sesuai kebutuhan
-                }
-                return role_mapping.get(role.lower(), role.capitalize())
-                professional_role = get_professional_role(st.session_state.profile.get("role", ""))
-
             # Hitung jumlah follow-up yang sudah dikirim
             followups = db.get_followups_by_activity_id(prospect['id'])
             followup_count = len(followups)
 
-            # Generate template berbasis role, industri, dan frekuensi follow-up
+            # Generate template berbasis role, industri, dan follow-up number
             contact_title = prospect.get("contact_title", "").lower() if prospect.get("contact_title") else ""
             prospect_industry = prospect.get("industry", "").lower() if prospect.get("industry") else ""
 
             html_template = generate_html_email_template(prospect, role=contact_title, industry=prospect_industry, follow_up_number=followup_count + 1)
-
             edited_html = st.text_area("Edit Template Email", value=html_template, height=400)
 
             col1, col2 = st.columns(2)
@@ -823,10 +633,209 @@ def page_prospect_research():
                         "content": edited_html,
                         "from": st.secrets["zoho"]["from_email"]
                     })
+
                     if success:
                         st.success(msg)
                     else:
                         st.error(msg)
+
+
+# --- Template Email Dinamis ---
+def generate_html_email_template(prospect, role=None, industry=None, follow_up_number=None):
+    contact_name = prospect.get("contact_name", "Bapak/Ibu")
+    company_name = prospect.get("company_name", "Perusahaan")
+    location = prospect.get("location", "Lokasi")
+    next_step = prospect.get("next_step", "baru")
+
+    default_template = f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+    <h2 style="color: #1f77b4;">Penawaran Solusi AI Voice untuk {company_name}</h2>
+    
+    <p>Halo <strong>{contact_name}</strong>,</p>
+
+    <p>Kami melihat bahwa perusahaan Anda, <strong>{company_name}</strong>, sedang dalam tahap <em>{next_step}</em>. Kami menawarkan solusi berbasis <strong>AI Voice</strong> yang bisa meningkatkan efisiensi operasional dan engagement pelanggan.</p>
+
+    <p>Jika tertarik, silakan hubungi kami via {prospect.get('phone', st.session_state.profile.get('email'))}.</p>
+
+    <br>
+    <p><strong>{st.session_state.profile.get("full_name", "Tim EMI")}</strong><br>
+    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
+
+    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
+    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
+</div>"""
+
+    # --- Template berbasis role ---
+    if role:
+        role = role.lower()
+        if "ceo" in role or "founder" in role:
+            return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+    <h2 style="color: #1f77b4;">Solusi Strategis untuk {company_name} (CEO)</h2>
+    <p>Halo <strong>{contact_name}</strong>,</p>
+    <p>Saya melihat bahwa perusahaan Anda, <strong>{company_name}</strong>, saat ini sedang dalam tahap <em>{next_step}</em>. Sebagai pemimpin bisnis, apakah Anda tertarik dengan penawaran yang bisa meningkatkan efisiensi operasional dan pengalaman pelanggan secara signifikan?</p>
+    <p><strong>Kami menyediakan teknologi AI Voice</strong> yang memungkinkan bisnis seperti {company_name} melakukan:</p>
+    <ul>
+        <li>Panggilan otomatis dengan suara natural</li>
+        <li>Interaksi pelanggan 24/7 via telepon</li>
+        <li>Integrasi cepat dengan CRM atau sistem internal</li>
+        <li>Analisis percakapan pelanggan untuk optimasi layanan</li>
+    </ul>
+    <p>Apakah Anda tertarik untuk diskusi singkat? Saya siap jelaskan bagaimana solusi ini bisa bekerja untuk bisnis Anda.</p>
+
+    <br>
+    <p><strong>{st.session_state.profile.get("full_name", "Tim EMI")}</strong><br>
+    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
+
+    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
+    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
+</div>""".strip()
+
+        elif "cfo" in role or "finance" in role:
+            return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+    <h2 style="color: #ff7f0e;">Efisiensi Biaya untuk {company_name} (CFO)</h2>
+    <p>Halo <strong>{contact_name}</strong>,</p>
+    <p>Berdasarkan data bisnis Anda di <strong>{company_name}</strong>, kami menemukan bahwa ada potensi besar untuk meningkatkan efisiensi biaya operasional dengan menggunakan teknologi suara AI.</p>
+    <p><strong>AI Voice EMI</strong> membantu perusahaan seperti {company_name} dalam:</p>
+    <ul>
+        <li>Mengotomatisasi panggilan follow-up & reminder tanpa agen telemarketing</li>
+        <li>Meningkatkan konversi kampanye pemasaran via voice messaging</li>
+        <li>Mengurangi kebutuhan tenaga manusia untuk komunikasi awal prospek</li>
+        <li>Integrasikan langsung dengan sistem CRM untuk analisis cost-to-acquisition</li>
+    </ul>
+    <p>Dengan solusi ini, Anda bisa mengurangi biaya operasional hingga <strong>40%</strong> tanpa mengorbankan engagement pelanggan.</p>
+    <p>Jika tertarik, saya siap bantu Anda lihat simulasi efisiensi biaya yang bisa dicapai melalui demo singkat.</p>
+
+    <br>
+    <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
+    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
+
+    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
+    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
+</div>""".strip()
+
+        elif "it" in role or "tech" in role or "engineer" in role:
+            return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+    <h2 style="color: #17becf;">Teknologi Informasi untuk {company_name}</h2>
+    <p>Halo <strong>{contact_name}</strong>,</p>
+    <p>Berdasarkan riset kami, <strong>{company_name}</strong> menggunakan teknologi {', '.join(prospect.get("technology_used", ["Tidak ada"]))}. Kami menawarkan integrasi sistem berbasis AI Voice yang bisa langsung digunakan oleh tim IT Anda.</p>
+    <p>Jika tertarik, silakan balas email ini atau kontak saya via {prospect.get('phone', '')}.</p>
+
+    <br>
+    <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
+    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
+
+    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
+    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
+</div>""".strip()
+
+    # --- Template berbasis industri ---
+    if industry:
+        industry = industry.lower()
+        if "teknologi" in industry or "tech" in industry:
+            return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+    <h2 style="color: #17becf;">Teknologi Informasi untuk {company_name}</h2>
+    <p>Halo <strong>{contact_name}</strong>,</p>
+    <p>Kami percaya bahwa solusi IT & AI Voice kami sangat cocok untuk perusahaan Anda di industri teknologi informasi.</p>
+    <p>Jika tertarik, silakan balas email ini atau kontak saya via {prospect.get('phone', '')}.</p>
+
+    <br>
+    <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
+    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
+
+    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
+    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
+</div>""".strip()
+
+        elif "kesehatan" in industry or "hospital" in industry or "clinic" in industry:
+            return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+    <h2 style="color: #2ca02c;">Solusi Digital untuk Rumah Sakit/Klinik</h2>
+    <p>Halo <strong>{contact_name}</strong>,</p>
+    <p>Kami menemukan bahwa <strong>{company_name}</strong> berada di industri kesehatan. Kami punya solusi digital berbasis AI Voice untuk meningkatkan efisiensi operasional rumah sakit/klinik Anda.</p>
+    <p>Silakan balas email ini untuk diskusi lebih lanjut.</p>
+
+    <br>
+    <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
+    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
+
+    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
+    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
+</div>""".strip()
+
+        elif "skincare" in industry or "beauty" in industry or "cosmetic" in industry:
+            return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+    <h2 style="color: #e377c2;">Solusi Digital untuk Bisnis Skincare</h2>
+    <p>Halo <strong>{contact_name}</strong>,</p>
+    <p>Berdasarkan riset kami, <strong>{company_name}</strong> berada di industri skincare. Kami punya solusi <strong>AI Voice</strong> untuk meningkatkan efisiensi operasional dan personalisasi interaksi pelanggan.</p>
+    <p>Dengan teknologi ini, Anda bisa:</p>
+    <ul>
+        <li>Otomatiskan reminder treatment pelanggan</li>
+        <li>Tingkatkan engagement dengan voice campaign personal</li>
+        <li>Minimalkan biaya customer service</li>
+        <li>Lacak respons pelanggan secara real-time</li>
+    </ul>
+    <p>Silakan balas email ini untuk diskusi lebih lanjut.</p>
+
+    <br>
+    <p><strong>{st.session_state.profile.get("full_name", "Tim EMI")}</strong><br>
+    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
+
+    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
+    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
+</div>""".strip()
+
+    # --- Template berbasis frekuensi follow-up ---
+    if follow_up_number == 1:
+        return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+    <h2 style="color: #1f77b4;">Follow-up 1 - Halo {contact_name}, Ini Penawaran dari EMI</h2>
+    <p>Saya menemukan data perusahaan Anda saat riset di industri {industry}. Kami percaya bahwa solusi AI Voice kami sangat cocok untuk bisnis seperti {company_name}.</p>
+    <p>Apakah Anda tertarik untuk diskusi singkat?</p>
+
+    <br>
+    <p><strong>{st.session_state.profile.get("full_name", "Tim EMI")}</strong><br>
+    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
+
+    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
+    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
+</div>""".strip()
+
+    elif follow_up_number == 2:
+        return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+    <h2 style="color: #17becf;">Follow-up 2 - Update Tambahan untuk {company_name}</h2>
+    <p>Halo <strong>{contact_name}</strong>,</p>
+    <p>Sebelumnya, kita sudah sempat komunikasi mengenai solusi digital untuk {company_name}. Sekarang, saya ingin memberikan info tambahan tentang bagaimana <strong>AI Voice</strong> bisa membantu tim Anda:</p>
+    <ul>
+        <li>Personalisasi pesan berdasarkan riwayat interaksi</li>
+        <li>Skalakan ratusan panggilan harian</li>
+        <li>Transkrip percakapan untuk analisis tim sales</li>
+        <li>Integrasikan dengan sistem billing/CRM Anda</li>
+    </ul>
+    <p>Jika ada pertanyaan atau butuh info lebih lanjut, jangan ragu untuk balas email ini.</p>
+
+    <br>
+    <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
+    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
+
+    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
+    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
+</div>""".strip()
+
+    elif follow_up_number >= 3:
+        return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+    <h2 style="color: #d62728;">Follow-up 3 - Penawaran Terakhir</h2>
+    <p>Halo <strong>{contact_name}</strong>,</p>
+    <p>Kami belum mendapat respons terkait penawaran sebelumnya. Apakah masih tertarik dengan solusi AI Voice untuk {company_name}? Kami bisa bantu Anda meningkatkan efisiensi dan skalabilitas bisnis Anda.</p>
+    <p>Silakan balas email ini atau kontak saya via {prospect.get('phone', st.session_state.profile.get('email'))}.</p>
+
+    <br>
+    <p><strong>{st.session_state.profile.get("full_name", "Tim EMI")}</strong><br>
+    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
+
+    <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
+    <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
+</div>""".strip()
+
+    return default_template.strip()
+
+
 # --- Pengaturan Aplikasi ---
 def page_settings():
     st.title("Pengaturan Aplikasi")

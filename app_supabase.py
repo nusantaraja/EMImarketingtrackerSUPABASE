@@ -541,7 +541,7 @@ def page_prospect_research():
             followup_count = len(followups)
             contact_title = prospect.get("contact_title", "").lower() if prospect.get("contact_title") else ""
             prospect_industry = prospect.get("industry", "").lower() if prospect.get("industry") else ""
-            html_template = generate_html_email_template(prospect, role=contact_title, industry=prospect_industry, follow_up_number=followup_count + 1)
+            html_template = generate_html_email_template(prospect, user_profile=st.session_state.profile)
             edited_html = st.text_area("Edit Template Email", value=html_template, height=400)
             col1, col2 = st.columns(2)
             with col1:

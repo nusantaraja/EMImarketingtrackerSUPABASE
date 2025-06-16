@@ -230,11 +230,34 @@ def save_email_template_to_prospect(prospect_id, template_html):
         return True, "Template berhasil disimpan!"
     except Exception as e: return False, f"Gagal menyimpan template: {e}"
 
-def send_email_via_zoho(email_data):
-    url, headers = "https://mail.zoho.com/api/v1/messages", {"Authorization": f"Zoho-oauthtoken {st.secrets['zoho']['access_token']}", "Content-Type": "application/json"}
-    payload = {"from": {"address": email_data["from"]}, "to": [{"address": email_data["to"]}], "subject": email_data["subject"], "content": [{"type": "text/html", "content": email_data["content"]}]}
+def refresh_zoho_token():
+    url, payload = "https://accounts.zoho.com/oauth/v2/token", {"grant_type": "refresh_token", "client_id": st.secrets["zoho"]["client_id"], "client_secret": st.secrets["zoho"]["client_secret"], "refresh_token": st.secrets["zoho"].get("refresh_token", "")}
     try:
-        response = requests.post(url, json=payload, headers=headers)
+        response = requests.post(url, data=payload)
+        if response.status_code == 200:
+            tokens = response.json()
+            # Ini tidak akan berfungsi di Streamlit Cloud, tapi kita coba saja
+            st.secrets["zoho"]["access_token"] = tokens.get("access_token", "")
+            return True, "Token berhasil diperbarui!"
+        else: return False, f"Gagal memperbarui token: {response.text}"
+    except Exception as e: return False, f"Error saat refresh token: {e}"
+
+def send_email_via_zoho(email_data):
+    url = "https://mail.zoho.com/api/v1/messages"
+    def attempt_send():
+        headers = {"Authorization": f"Zoho-oauthtoken {st.secrets['zoho']['access_token']}", "Content-Type": "application/json"}
+        payload = {"from": {"address": email_data["from"]}, "to": [{"address": email_data["to"]}], "subject": email_data["subject"], "content": [{"type": "text/html", "content": email_data["content"]}]}
+        return requests.post(url, json=payload, headers=headers)
+    try:
+        response = attempt_send()
+        if response.status_code == 401:
+            st.info("Access token Zoho kedaluwarsa. Mencoba me-refresh...")
+            refresh_success, refresh_msg = refresh_zoho_token()
+            if refresh_success:
+                st.info("Token berhasil diperbarui. Mencoba mengirim email lagi...")
+                response = attempt_send()
+            else:
+                return False, f"Gagal me-refresh token: {refresh_msg}"
         if response.status_code in [200, 202]: return True, "Email berhasil dikirim!"
         else: return False, f"Gagal kirim email: {response.text}"
     except Exception as e: return False, f"Error saat kirim email: {e}"
@@ -245,24 +268,9 @@ def exchange_code_for_tokens(code):
         response = requests.post(url, data=payload)
         if response.status_code == 200:
             tokens = response.json()
+            # Ini tidak akan berfungsi di Streamlit Cloud, tapi kita coba saja
             st.secrets["zoho"]["access_token"] = tokens.get("access_token", "")
             if "refresh_token" in tokens: st.secrets["zoho"]["refresh_token"] = tokens.get("refresh_token", "")
-            # Perlu cara yang lebih baik untuk update secrets di production
-            # with open(".streamlit/secrets.toml", "w") as f: toml.dump(st.secrets, f)
             return True, "Token berhasil digenerate!"
         else: return False, f"Gagal mendapatkan token: {response.text}"
     except Exception as e: return False, f"Error: {e}"
-
-def refresh_zoho_token():
-    url, payload = "https://accounts.zoho.com/oauth/v2/token", {"grant_type": "refresh_token", "client_id": st.secrets["zoho"]["client_id"], "client_secret": st.secrets["zoho"]["client_secret"], "refresh_token": st.secrets["zoho"].get("refresh_token", "")}
-    try:
-        response = requests.post(url, data=payload)
-        if response.status_code == 200:
-            tokens = response.json()
-            st.secrets["zoho"]["access_token"] = tokens.get("access_token", "")
-            if "refresh_token" in tokens: st.secrets["zoho"]["refresh_token"] = tokens.get("refresh_token", "")
-            # Perlu cara yang lebih baik untuk update secrets di production
-            # with open(".streamlit/secrets.toml", "w") as f: toml.dump(st.secrets, f)
-            return True, "Token berhasil diperbarui!"
-        else: return False, f"Gagal memperbarui token: {response.text}"
-    except Exception as e: return False, f"Error saat refresh token: {e}"

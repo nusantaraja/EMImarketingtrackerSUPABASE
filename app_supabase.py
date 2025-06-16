@@ -33,7 +33,7 @@ def date_to_str(dt):
 def str_to_date(s):
     return datetime.strptime(s, "%Y-%m-%d").date() if s else None
 
-# --- Helper Template Email (Final & Dinamis dengan Tanda Tangan Rapi) ---
+# --- Helper Template Email (Final & Dinamis) ---
 def generate_html_email_template(prospect, user_profile):
     contact_name = prospect.get("contact_name", "Bapak/Ibu")
     company_name = prospect.get("company_name", "Perusahaan Anda")
@@ -53,19 +53,7 @@ def generate_html_email_template(prospect, user_profile):
         sender_title = "Business Development, Solusi AI Indonesia"
         email_body = f"""<p>Saya <strong>{sender_name}</strong> dari tim Business Development di <strong>Solusi AI Indonesia</strong>.</p><p>Apakah tim Anda di <strong>{company_name}</strong> menghabiskan banyak waktu menjawab pertanyaan pelanggan yang berulang?</p><p>Saya bisa siapkan demo singkat 15 menit untuk menunjukkan cara kerjanya. Apakah hari Selasa atau Kamis sore pekan ini cocok untuk Anda?</p>"""
     
-    return f"""
-    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-        <h2 style="color: #1f77b4;">Penawaran AI untuk {company_name}</h2>
-        <p>Yth. Bapak/Ibu <strong>{contact_name}</strong>,</p>
-        {email_body}
-        <p>Terima kasih atas waktu dan perhatian Anda.</p>
-        <p>Hormat saya,</p>
-        <p style="margin-bottom: 0;"><strong>{sender_name}</strong></p>
-        <p style="margin-top: 0; margin-bottom: 0;"><em>{sender_title}</em></p>
-        <p style="margin-top: 0; margin-bottom: 0;"><a href="https://solusiai.id">solusiai.id</a></p>
-        {f'<p style="margin-top: 0;"><a href="{sender_linkedin}">Profil LinkedIn</a></p>' if sender_linkedin else ""}
-    </div>
-    """.strip()
+    return f"""<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;"><h2 style="color: #1f77b4;">Penawaran AI untuk {company_name}</h2><p>Yth. Bapak/Ibu <strong>{contact_name}</strong>,</p>{email_body}<p>Terima kasih atas waktu dan perhatian Anda.</p><p>Hormat saya,</p><p style="margin-bottom: 0;"><strong>{sender_name}</strong></p><p style="margin-top: 0; margin-bottom: 0;"><em>{sender_title}</em></p><p style="margin-top: 0; margin-bottom: 0;"><a href="https://solusiai.id">solusiai.id</a></p>{f'<p style="margin-top: 0;"><a href="{sender_linkedin}">Profil LinkedIn</a></p>' if sender_linkedin else ""}</div>""".strip()
 
 # --- Halaman & Fungsi Utama ---
 
@@ -110,7 +98,7 @@ def get_data_based_on_role():
         activities, prospects, profiles = db.get_all_marketing_activities(), db.get_all_prospect_research(), db.get_all_profiles()
     elif role == 'manager':
         activities, prospects, profiles = db.get_team_marketing_activities(user.id), db.get_team_prospect_research(user.id), db.get_team_profiles(user.id)
-    else:
+    else: # marketing
         activities, prospects, profiles = db.get_marketing_activities_by_user_id(user.id), db.get_prospect_research_by_marketer(user.id), [profile]
     return activities, prospects, profiles
 
@@ -461,19 +449,28 @@ def page_settings():
                 success, msg = db.update_app_config({'app_name': app_name})
                 if success: st.success(msg); st.rerun()
                 else: st.error(msg)
+    
     st.divider()
-    st.subheader("Zoho Mail Setup")
+    st.subheader("Pengaturan Integrasi Zoho Mail")
+    if st.secrets["zoho"].get("access_token"):
+        st.success("Integrasi Zoho Mail Aktif. Aplikasi akan mencoba me-refresh token secara otomatis jika diperlukan.")
+    else:
+        st.warning("Integrasi Zoho Mail belum aktif. Silakan generate token awal.")
+    st.write("Jika Anda perlu generate token untuk pertama kali atau jika refresh otomatis gagal, gunakan form di bawah ini.")
+    
     with st.form("zoho_auth_form"):
-        st.write("### Langkah 1: Ambil Code dari Zoho")
+        st.write("#### Langkah 1: Ambil Code dari Zoho")
         auth_url = get_authorization_url()
-        st.markdown(f"[Klik di sini untuk izinkan akses Zoho Mail]({auth_url})")
+        st.markdown(f"[Klik di sini untuk mengizinkan akses Zoho Mail]({auth_url})")
+        st.info("Setelah klik 'Accept', salin 'code' dari URL di browser Anda dan tempel di bawah.")
         code = st.text_input("Masukkan code dari Zoho:")
         if st.form_submit_button("Generate Access Token"):
             if not code: st.warning("Silakan masukkan code dari Zoho")
             else:
-                success, msg = db.exchange_code_for_tokens(code)
-                if success: st.success(msg); st.rerun()
-                else: st.error(msg)
+                with st.spinner("Sedang menukar kode dengan token..."):
+                    success, msg = db.exchange_code_for_tokens(code)
+                    if success: st.success(msg); st.rerun()
+                    else: st.error(msg)
 
 def get_authorization_url():
     params = {"response_type": "code", "client_id": st.secrets["zoho"]["client_id"], "scope": "ZohoMail.send,ZohoMail.read", "redirect_uri": st.secrets["zoho"].get("redirect_uri", "https://emimtsupabase.streamlit.app/oauth/callback")}

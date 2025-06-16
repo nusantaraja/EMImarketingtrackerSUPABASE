@@ -58,7 +58,7 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
     <p>Jika tertarik, silakan hubungi kami via {prospect.get('phone', st.session_state.profile.get('email'))}.</p>
 
     <br>
-    <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
+    <p><strong>{st.session_state.profile.get("full_name", "Tim EMI")}</strong><br>
     <em>{st.session_state.profile.get("role", "")}</em></p>
 
     <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
@@ -97,7 +97,7 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
     <ul>
         <li>Mengotomatisasi panggilan follow-up & reminder tanpa agen telemarketing</li>
         <li>Meningkatkan konversi kampanye pemasaran via voice messaging</li>
-        <li>Mengurangi kebutuhan tenaga manusia untuk komunikasi awal dengan prospek</li>
+        <li>Mengurangi kebutuhan tenaga manusia untuk komunikasi awal prospek</li>
         <li>Integrasi langsung dengan sistem CRM untuk analisis cost-to-acquisition</li>
     </ul>
     <p>Dengan solusi ini, Anda bisa mengurangi biaya operasional hingga <strong>40%</strong> tanpa mengorbankan engagement pelanggan.</p>
@@ -175,7 +175,6 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
     if follow_up_number == 1:
         return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
     <h2 style="color: #1f77b4;">Follow-up 1 - Halo {contact_name}, Ini Penawaran dari EMI</h2>
-    <p>Halo <strong>{contact_name}</strong>,</p>
     <p>Saya menemukan data perusahaan Anda saat riset di industri {industry}. Kami percaya bahwa solusi AI Voice kami sangat cocok untuk bisnis seperti {company_name}.</p>
     <p>Apakah Anda tertarik untuk diskusi singkat?</p>
     <br>
@@ -211,7 +210,7 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
     <p>Kami belum mendapat respons terkait penawaran sebelumnya. Apakah masih tertarik dengan solusi AI Voice untuk {company_name}? Kami bisa bantu Anda meningkatkan efisiensi dan skalabilitas bisnis Anda.</p>
     <p>Silakan balas email ini atau kontak saya via {prospect.get('phone', st.session_state.profile.get('email'))}.</p>
     <br>
-    <p><strong>{st.session_manipulate.profile.get("full_name", "Tim EMI")}</strong><br>
+    <p><strong>{st.session_state.profile.get("full_name", "Tim EMI")}</strong><br>
     <em>{st.session_state.profile.get("role", "")}</em></p>
     <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
     <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
@@ -277,27 +276,9 @@ def page_dashboard():
     else:
         df = pd.DataFrame(activities)
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     col1.metric("Total Aktivitas", len(df))
     col2.metric("Total Prospek Unik", df['prospect_name'].nunique())
-    if profile.get('role') == 'superadmin':
-        col3.metric("Jumlah Tim Marketing", df['marketer_id'].nunique())
-
-    st.subheader("Analisis Aktivitas Pemasaran")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        status_counts = df['status'].map(STATUS_MAPPING).value_counts()
-        fig = px.pie(status_counts, values=status_counts.values, names=status_counts.index,
-                     title="Distribusi Status Prospek", color_discrete_sequence=px.colors.sequential.RdBu)
-        st.plotly_chart(fig, use_container_width=True)
-
-    with col2:
-        type_counts = df['activity_type'].value_counts()
-        fig2 = px.bar(type_counts, x=type_counts.index, y=type_counts.values,
-                      title="Distribusi Jenis Aktivitas", labels={'x': 'Jenis Aktivitas', 'y': 'Jumlah'},
-                      color_continuous_scale=px.colors.sequential.Viridis)
-        st.plotly_chart(fig2, use_container_width=True)
 
     if profile.get('role') == 'superadmin':
         col3, col4 = st.columns(2)
@@ -314,6 +295,22 @@ def page_dashboard():
                           title="Aktivitas per Marketing", labels={'x': 'Nama Marketing', 'y': 'Jumlah Aktivitas'},
                           color_continuous_scale=px.colors.sequential.Viridis, height=300)
             st.plotly_chart(fig4, use_container_width=True)
+
+    st.subheader("Analisis Aktivitas Pemasaran")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        status_counts = df['status'].map(STATUS_MAPPING).value_counts()
+        fig = px.pie(status_counts, values=status_counts.values, names=status_counts.index,
+                     title="Distribusi Status Prospek", color_discrete_sequence=px.colors.sequential.RdBu)
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        type_counts = df['activity_type'].value_counts()
+        fig2 = px.bar(type_counts, x=type_counts.index, y=type_counts.values,
+                      title="Distribusi Jenis Aktivitas", labels={'x': 'Jenis Aktivitas', 'y': 'Jumlah'},
+                      color_continuous_scale=px.colors.sequential.Viridis)
+        st.plotly_chart(fig2, use_container_width=True)
 
     st.divider()
     st.subheader("Aktivitas Terbaru")
@@ -351,7 +348,7 @@ def page_dashboard():
                 'next_followup_date': 'Tanggal', 'prospect_name': 'Prospek',
                 'marketer_username': 'Marketing', 'next_action': 'Tindakan'
             })
-            upcoming_display_df['Tanggal'] = upcoming_display_df['Tanggal'].dt.tz_convert(wib_tz).dt.strftime('%A, %d %b %Y')
+            upcoming_display_df['Tanggal'] = pd.to_datetime(upcoming_display_df['Tanggal']).dt.tz_localize('UTC').dt.tz_convert(pytz.timezone("Asia/Jakarta")).dt.strftime('%A, %d %b %Y')
             st.dataframe(upcoming_display_df, use_container_width=True, hide_index=True)
         else:
             st.info("Tidak ada jadwal follow-up dalam 7 hari ke depan.")
@@ -591,11 +588,13 @@ def page_prospect_research():
         return
 
     df = pd.DataFrame(filtered_prospects)
-    display_cols = ['company_name', 'contact_name', 'industry', 'status']
-    if 'status' not in df.columns:
-        st.error("Kolom 'status' tidak ditemukan di data prospek. Pastikan tabel Supabase memiliki kolom 'status'.")
-        return
 
+    # Cek apakah kolom 'status' tersedia
+    if 'status' not in df.columns:
+        st.error("Kolom 'status' tidak ditemukan di data prospek. Pastikan database memiliki kolom 'status'.")
+        st.stop()
+
+    display_cols = ['company_name', 'contact_name', 'industry', 'status']
     df_display = df[display_cols].rename(columns={'company_name': 'Perusahaan', 'contact_name': 'Kontak', 'industry': 'Industri', 'status': 'Status'})
     df_display['Status'] = df_display['Status'].map(STATUS_MAPPING).fillna("Tidak Diketahui")
     st.dataframe(df_display, use_container_width=True, hide_index=True)
@@ -633,8 +632,8 @@ def page_prospect_research():
             next_step_date = st.date_input("Tanggal Follow-up")
             status = st.selectbox("Status Prospek", ["baru", "dalam_proses", "berhasil", "gagal"])
             source = st.text_input("Sumber Prospek", value="manual")
-
-            if st.form_submit_button("Simpan Prospek"):
+            submitted = st.form_submit_button("Simpan Prospek")
+            if submitted:
                 if not company_name or not contact_name:
                     st.error("Nama perusahaan dan nama kontak wajib diisi!")
                 else:
@@ -784,7 +783,6 @@ def page_prospect_research():
 
             if st.button("Kirim Email via Zoho"):
                 with st.spinner("Sedang mengirim..."):
-                    # Auto-refresh token jika expired
                     if not st.secrets["zoho"].get("access_token"):
                         success, msg = db.refresh_zoho_token()
                         if not success:
@@ -801,38 +799,6 @@ def page_prospect_research():
                         st.success(msg)
                     else:
                         st.error(msg)
-
-
-# --- Manajemen Pengguna (Superadmin Only) ---
-def page_user_management():
-    st.title("Manajemen Pengguna")
-    tab1, tab2 = st.tabs(["Daftar Pengguna", "Tambah Pengguna Baru"])
-
-    with tab1:
-        profiles = db.get_all_profiles()
-        if profiles:
-            df = pd.DataFrame(profiles).rename(columns={'id': 'User ID', 'full_name': 'Nama Lengkap', 'role': 'Role', 'email': 'Email'})
-            st.dataframe(df[['User ID', 'Nama Lengkap', 'Email', 'Role']], use_container_width=True)
-        else:
-            st.info("Belum ada pengguna terdaftar.")
-
-    with tab2:
-        st.subheader("Form Tambah Pengguna Baru")
-        full_name = st.text_input("Nama Lengkap")
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-        role = st.selectbox("Role", ["marketing", "superadmin"])
-        if st.button("Daftarkan Pengguna Baru"):
-            if not all([full_name, email, password]):
-                st.error("Semua field wajib diisi!")
-            else:
-                user, error = db.sign_up(email, password, full_name, role)
-                if user:
-                    st.success(f"Pengguna {full_name} berhasil didaftarkan.")
-                    st.rerun()
-                else:
-                    st.error(f"Gagal mendaftarkan: {error}")
-
 
 # --- Pengaturan Aplikasi ---
 def page_settings():
@@ -851,7 +817,6 @@ def page_settings():
                 else:
                     st.error(msg)
 
-    # --- Bagian Autentikasi Zoho Mail ---
     st.divider()
     st.subheader("Zoho Mail Setup")
     zoho_secrets = st.secrets.get("zoho", {})
@@ -860,7 +825,6 @@ def page_settings():
         auth_url = get_authorization_url()
         st.markdown(f"[Klik di sini untuk izinkan akses Zoho Mail]({auth_url})")
         code = st.text_input("Masukkan code dari Zoho:")
-
         if st.form_submit_button("Generate Access Token"):
             if not code:
                 st.warning("Silakan masukkan code dari Zoho")
@@ -902,7 +866,7 @@ def main():
         elif page == "Aktivitas Pemasaran":
             page_activities_management()
         elif page == "Manajemen Pengguna":
-            page_user_management()
+            db.page_user_management()
         elif page == "Pengaturan":
             page_settings()
         elif page == "Riset Prospek":

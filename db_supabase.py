@@ -5,6 +5,7 @@ import requests
 import toml
 
 
+# --- Koneksi ke Supabase ---
 @st.cache_resource
 def init_connection() -> Client:
     try:
@@ -19,18 +20,21 @@ def init_connection() -> Client:
 
 # --- Fungsi Autentikasi ---
 def sign_in(email, password):
+    """Login pengguna via Supabase Auth"""
     supabase = init_connection()
     try:
         response = supabase.auth.sign_in_with_password({"email": email, "password": password})
         return response.user, None
     except Exception as e:
-        error_message = str(e.args[0]['message']) if e.args and isinstance(e.args[0], dict) else str(e)
+        error_message = str(e.args[0]['message']) if (e.args and isinstance(e.args[0], dict)) else str(e)
         return None, error_message
 
 
 def sign_up(email, password, full_name, role):
+    """Daftarkan pengguna baru + buat profil"""
     supabase = init_connection()
     try:
+        # Daftar user baru via Supabase Auth
         response = supabase.auth.sign_up({"email": email, "password": password})
         user = response.user
 
@@ -45,11 +49,12 @@ def sign_up(email, password, full_name, role):
 
         return user, None
     except Exception as e:
-        error_message = str(e.args[0]['message']) if e.args and isinstance(e.args[0], dict) else str(e)
+        error_message = str(e.args[0]['message']) if (e.args and isinstance(e.args[0], dict)) else str(e)
         return None, error_message
 
 
 def get_profile(user_id):
+    """Ambil data profil pengguna dari tabel 'profiles'"""
     supabase = init_connection()
     try:
         response = supabase.from_("profiles").select("*").eq("id", user_id).single().execute()
@@ -59,7 +64,38 @@ def get_profile(user_id):
 
 
 # --- Manajemen Pengguna (Superadmin Only) ---
+def page_user_management():
+    st.title("Manajemen Pengguna")
+    tab1, tab2 = st.tabs(["Daftar Pengguna", "Tambah Pengguna Baru"])
+
+    with tab1:
+        profiles = get_all_profiles()
+        if profiles:
+            df = pd.DataFrame(profiles).rename(columns={'id': 'User ID', 'full_name': 'Nama Lengkap', 'role': 'Role', 'email': 'Email'})
+            st.dataframe(df[['User ID', 'Nama Lengkap', 'Email', 'Role']], use_container_width=True)
+        else:
+            st.info("Belum ada pengguna terdaftar.")
+
+    with tab2:
+        st.subheader("Form Tambah Pengguna Baru")
+        full_name = st.text_input("Nama Lengkap")
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+        role = st.selectbox("Role", ["marketing", "superadmin"])
+        if st.button("Daftarkan Pengguna Baru"):
+            if not all([full_name, email, password]):
+                st.error("Semua field wajib diisi!")
+            else:
+                user, error = sign_up(email, password, full_name, role)
+                if user:
+                    st.success(f"Pengguna {full_name} berhasil didaftarkan.")
+                    st.rerun()
+                else:
+                    st.error(f"Gagal mendaftarkan: {error}")
+
+
 def get_all_profiles():
+    """Ambil semua profil pengguna"""
     supabase = init_connection()
     try:
         response = supabase.from_("profiles").select("*").execute()
@@ -70,11 +106,13 @@ def get_all_profiles():
 
 
 def delete_user_by_id(user_id):
+    """Hapus pengguna (hanya untuk superadmin)"""
     return False, "Fitur Hapus Pengguna sedang dalam pengembangan."
 
 
 # --- Marketing Activities CRUD ---
 def get_all_marketing_activities():
+    """Ambil semua aktivitas pemasaran"""
     supabase = init_connection()
     try:
         response = supabase.from_("marketing_activities").select("*").order("created_at", desc=True).execute()
@@ -85,9 +123,10 @@ def get_all_marketing_activities():
 
 
 def get_marketing_activities_by_user_id(user_id):
+    """Ambil aktivitas berdasarkan user_id"""
     supabase = init_connection()
     try:
-        response = supabase.from_("marketing_activities").select("*").eq("marketer_id", user_id).order("created_at", desc=True).execute()
+        response = supabase.from_("marketing_activities").select("*").eq("marketer_id", str(user_id)).order("created_at", desc=True).execute()
         return response.data
     except Exception as e:
         st.error(f"Error mengambil data aktivitas untuk pengguna: {e}")
@@ -95,9 +134,10 @@ def get_marketing_activities_by_user_id(user_id):
 
 
 def get_activity_by_id(activity_id):
+    """Ambil detail satu aktivitas"""
     supabase = init_connection()
     try:
-        response = supabase.from_("marketing_activities").select("*").eq("id", activity_id).single().execute()
+        response = supabase.from_("marketing_activities").select("*").eq("id", str(activity_id)).single().execute()
         return response.data
     except Exception as e:
         st.error(f"Error mengambil detail aktivitas: {e}")
@@ -105,10 +145,11 @@ def get_activity_by_id(activity_id):
 
 
 def add_marketing_activity(marketer_id, marketer_username, prospect_name, prospect_location, contact_person, contact_position, contact_phone, contact_email, activity_date, activity_type, description, status):
+    """Simpan aktivitas pemasaran baru"""
     supabase = init_connection()
     try:
         data_to_insert = {
-            "marketer_id": marketer_id,
+            "marketer_id": str(marketer_id),
             "marketer_username": marketer_username,
             "prospect_name": prospect_name,
             "prospect_location": prospect_location,
@@ -128,7 +169,8 @@ def add_marketing_activity(marketer_id, marketer_username, prospect_name, prospe
         return False, f"Gagal menambahkan aktivitas: {e}", None
 
 
-def edit_marketing_activity(activity_id, prospect_name, prospect_location, contact_person, contact_position, contact_phone, contact_email, activity_date, activity_type, description, status):
+def edit_marketing_activity(activity_id, prospect_name, prospect_location, contact_person, contact_position, contact_phone, contact_email, activity_date, activity_type, description, status_key):
+    """Perbarui aktivitas pemasaran"""
     supabase = init_connection()
     try:
         data_to_update = {
@@ -141,20 +183,21 @@ def edit_marketing_activity(activity_id, prospect_name, prospect_location, conta
             "activity_date": activity_date,
             "activity_type": activity_type,
             "description": description,
-            "status": status
+            "status": status_key
         }
 
-        response = supabase.from_("marketing_activities").update(data_to_update).eq("id", activity_id).execute()
+        response = supabase.from_("marketing_activities").update(data_to_update).eq("id", str(activity_id)).execute()
         return True, "Aktivitas berhasil diperbarui."
     except Exception as e:
         return False, f"Gagal memperbarui aktivitas: {e}"
 
 
 def delete_marketing_activity(activity_id):
+    """Hapus aktivitas beserta follow-up"""
     supabase = init_connection()
     try:
-        supabase.from_("followups").delete().eq("activity_id", activity_id).execute()
-        supabase.from_("marketing_activities").delete().eq("id", activity_id).execute()
+        supabase.from_("followups").delete().eq("activity_id", str(activity_id)).execute()
+        supabase.from_("marketing_activities").delete().eq("id", str(activity_id)).execute()
         return True, "Aktivitas berhasil dihapus!"
     except Exception as e:
         return False, f"Gagal menghapus aktivitas: {e}"
@@ -162,10 +205,10 @@ def delete_marketing_activity(activity_id):
 
 # --- Follow-up CRUD ---
 def get_followups_by_activity_id(activity_id):
+    """Ambil semua follow-up berdasarkan activity_id"""
     supabase = init_connection()
     try:
-        # Pastikan activity_id dikirim sebagai string
-        response = supabase.from_("followups").select("*").eq("activity_id", str(activity_id)).execute()
+        response = supabase.from_("followups").select("*").eq("activity_id", str(activity_id)).order("created_at", desc=True).execute()
         return response.data
     except Exception as e:
         st.error(f"Error mengambil data follow-up: {e}")
@@ -173,17 +216,18 @@ def get_followups_by_activity_id(activity_id):
 
 
 def add_followup(activity_id, marketer_id, marketer_username, notes, next_action, next_followup_date, interest_level, status_update):
+    """Menambahkan follow-up dan update status aktivitas utama"""
     supabase = init_connection()
     try:
         # Update status aktivitas utama
-        supabase.from_("marketing_activities").update({"status": status_update}).eq("id", activity_id).execute()
+        supabase.from_("marketing_activities").update({"status": status_update}).eq("id", str(activity_id)).execute()
 
         # Format tanggal follow-up
         next_followup_date_str = next_followup_date.strftime("%Y-%m-%d") if next_followup_date else None
 
         data_to_insert = {
-            "activity_id": activity_id,
-            "marketer_id": marketer_id,
+            "activity_id": str(activity_id),
+            "marketer_id": str(marketer_id),
             "marketer_username": marketer_username,
             "notes": notes,
             "next_action": next_action,
@@ -199,6 +243,7 @@ def add_followup(activity_id, marketer_id, marketer_username, notes, next_action
 
 # --- Riset Prospek CRUD ---
 def get_all_prospect_research():
+    """Ambil semua riset prospek"""
     supabase = init_connection()
     try:
         response = supabase.from_("prospect_research").select("*").order("created_at", desc=True).execute()
@@ -209,9 +254,10 @@ def get_all_prospect_research():
 
 
 def get_prospect_research_by_marketer(marketer_id):
+    """Ambil riset prospek berdasarkan marketer_id"""
     supabase = init_connection()
     try:
-        response = supabase.from_("prospect_research").select("*").eq("marketer_id", marketer_id).order("created_at", desc=True).execute()
+        response = supabase.from_("prospect_research").select("*").eq("marketer_id", str(marketer_id)).order("created_at", desc=True).execute()
         return response.data
     except Exception as e:
         st.error(f"Error mengambil data prospek: {e}")
@@ -219,9 +265,10 @@ def get_prospect_research_by_marketer(marketer_id):
 
 
 def get_prospect_by_id(prospect_id):
+    """Ambil detail satu prospek berdasarkan ID"""
     supabase = init_connection()
     try:
-        response = supabase.from_("prospect_research").select("*").eq("id", prospect_id).single().execute()
+        response = supabase.from_("prospect_research").select("*").eq("id", str(prospect_id)).single().execute()
         return response.data
     except Exception as e:
         st.error(f"Error mengambil detail prospek: {e}")
@@ -229,6 +276,7 @@ def get_prospect_by_id(prospect_id):
 
 
 def add_prospect_research(**kwargs):
+    """Simpan riset prospek baru"""
     supabase = init_connection()
     try:
         data_to_insert = {
@@ -264,6 +312,7 @@ def add_prospect_research(**kwargs):
 
 
 def edit_prospect_research(prospect_id, **kwargs):
+    """Perbarui riset prospek berdasarkan ID"""
     supabase = init_connection()
     try:
         data_to_update = {
@@ -290,13 +339,14 @@ def edit_prospect_research(prospect_id, **kwargs):
             "email_status": kwargs.get("email_status", "valid")
         }
 
-        response = supabase.from_("prospect_research").update(data_to_update).eq("id", prospect_id).execute()
+        response = supabase.from_("prospect_research").update(data_to_update).eq("id", str(prospect_id)).execute()
         return True, "Prospek berhasil diperbarui."
     except Exception as e:
         return False, f"Gagal memperbarui prospek: {e}"
 
 
 def search_prospect_research(keyword):
+    """Cari prospek berdasarkan keyword"""
     supabase = init_connection()
     try:
         response = supabase.from_("prospect_research").select("*").or_(
@@ -315,6 +365,7 @@ def search_prospect_research(keyword):
 def sync_prospect_from_apollo(query):
     """
     Tarik data prospek dari Apollo.io berdasarkan query.
+    Harus punya API Key di secrets.toml
     """
     url = "https://api.apollo.io/v1/mixed_people_search" 
     headers = {
@@ -377,6 +428,7 @@ def sync_prospect_from_apollo(query):
 
 # --- Konfigurasi Aplikasi ---
 def get_app_config():
+    """Ambil konfigurasi aplikasi dari tabel config"""
     supabase = init_connection()
     try:
         response = supabase.from_("config").select("*").execute()
@@ -387,6 +439,7 @@ def get_app_config():
 
 
 def update_app_config(new_config):
+    """Perbarui konfigurasi aplikasi"""
     supabase = init_connection()
     try:
         for key, value in new_config.items():
@@ -398,17 +451,19 @@ def update_app_config(new_config):
 
 # --- Template Email (Opsional - Bisa Ditambah Nanti) ---
 def save_email_template_to_prospect(prospect_id, template_html):
+    """Simpan template HTML ke kolom last_email_template"""
     supabase = init_connection()
     try:
         data_to_update = {
             "last_email_template": template_html
         }
-        supabase.from_("prospect_research").update(data_to_update).eq("id", prospect_id).execute()
+        supabase.from_("prospect_research").update(data_to_update).eq("id", str(prospect_id)).execute()
         return True, "Template berhasil disimpan!"
     except Exception as e:
         return False, f"Gagal menyimpan template: {e}"
 
 
+# --- Kirim Email via Zoho Mail API ---
 def send_email_via_zoho(email_data):
     """
     Mengirim email via Zoho Mail API
@@ -444,6 +499,34 @@ def send_email_via_zoho(email_data):
 
 
 # --- Refresh Token Zoho ---
+def refresh_zoho_token():
+    url = "https://accounts.zoho.com/oauth/v2/token" 
+    payload = {
+        "grant_type": "refresh_token",
+        "client_id": st.secrets["zoho"]["client_id"],
+        "client_secret": st.secrets["zoho"]["client_secret"],
+        "refresh_token": st.secrets["zoho"].get("refresh_token", "")
+    }
+
+    try:
+        response = requests.post(url, data=payload)
+        if response.status_code == 200:
+            tokens = response.json()
+            st.secrets["zoho"]["access_token"] = tokens.get("access_token", "")
+            if "refresh_token" in tokens:
+                st.secrets["zoho"]["refresh_token"] = tokens.get("refresh_token", "")
+
+            with open(".streamlit/secrets.toml", "w") as f:
+                toml.dump(st.secrets._file, f)
+
+            return True, "Token berhasil diperbarui!"
+        else:
+            return False, f"Gagal memperbarui token: {response.text}"
+    except Exception as e:
+        return False, f"Error saat refresh token: {e}"
+
+
+# --- Exchange Code for Tokens (OAuth) ---
 def exchange_code_for_tokens(code):
     url = "https://accounts.zoho.com/oauth/v2/token" 
     payload = {
@@ -472,28 +555,48 @@ def exchange_code_for_tokens(code):
         return False, f"Error: {e}"
 
 
-def refresh_zoho_token():
-    url = "https://accounts.zoho.com/oauth/v2/token" 
-    payload = {
-        "grant_type": "refresh_token",
-        "client_id": st.secrets["zoho"]["client_id"],
-        "client_secret": st.secrets["zoho"]["client_secret"],
-        "refresh_token": st.secrets["zoho"].get("refresh_token", "")
-    }
-
+# --- Sinkron Profil dari Supabase ---
+def get_all_profiles():
+    """Untuk Superadmin: ambil semua profil"""
+    supabase = init_connection()
     try:
-        response = requests.post(url, data=payload)
-        if response.status_code == 200:
-            tokens = response.json()
-            st.secrets["zoho"]["access_token"] = tokens.get("access_token", "")
-            if "refresh_token" in tokens:
-                st.secrets["zoho"]["refresh_token"] = tokens.get("refresh_token", "")
-
-            with open(".streamlit/secrets.toml", "w") as f:
-                toml.dump(st.secrets._file, f)
-
-            return True, "Token berhasil diperbarui!"
-        else:
-            return False, f"Gagal memperbarui token: {response.text}"
+        response = supabase.from_("profiles").select("*").execute()
+        return response.data
     except Exception as e:
-        return False, f"Error saat refresh token: {e}"
+        st.error(f"Gagal mengambil data pengguna: {e}")
+        return []
+
+
+def get_profile(user_id):
+    """Ambil profil pengguna berdasarkan ID"""
+    supabase = init_connection()
+    try:
+        response = supabase.from_("profiles").select("*").eq("id", str(user_id)).single().execute()
+        return response.data
+    except Exception:
+        return None
+
+
+# --- Export Data (Opsional) ---
+def export_prospect_to_csv():
+    """Export semua prospek ke CSV"""
+    supabase = init_connection()
+    try:
+        response = supabase.from_("prospect_research").select("*").execute()
+        df = pd.DataFrame(response.data)
+        return df.to_csv(index=False), True
+    except Exception as e:
+        st.error(f"Gagal ekspor ke CSV: {e}")
+        return "", False
+
+
+# --- Fungsi Tambahan ---
+def get_all_activities():
+    """Ambil semua aktivitas pemasaran"""
+    supabase = init_connection()
+    try:
+        response = supabase.from_("marketing_activities").select("*").execute()
+        return response.data
+    except Exception as e:
+        st.error(f"Error mengambil semua aktivitas: {e}")
+        return []

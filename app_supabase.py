@@ -131,7 +131,7 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
             return f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
     <h2 style="color: #17becf;">Teknologi Informasi untuk {company_name}</h2>
     <p>Halo <strong>{contact_name}</strong>,</p>
-    <p>Berdasukasi riset kami, <strong>{company_name}</strong> menggunakan teknologi {', '.join(prospect.get("technology_used", ["Tidak ada"]))}. Kami menawarkan integrasi sistem berbasis AI Voice yang bisa langsung digunakan oleh tim IT Anda.</p>
+    <p>Berdasarkan riset kami, <strong>{company_name}</strong> menggunakan teknologi {', '.join(prospect.get("technology_used", ["Tidak ada"]))}. Kami menawarkan integrasi sistem berbasis AI Voice yang bisa langsung digunakan oleh tim IT Anda.</p>
     <p>Jika tertarik, silakan balas email ini atau kontak saya via {prospect.get('phone', '')}.</p>
 
     <br>
@@ -361,27 +361,16 @@ def page_dashboard():
         st.info("Tidak ada jadwal follow-up yang ditemukan.")
     else:
         for fu in all_followups:
-            fu['prospect_name'] = next((act['prospect_name'] for act in activities if act['id'] == fu['activity_id']), 'N/A')
-        followups_df = pd.DataFrame(all_followups)
-        followups_df['next_followup_date'] = pd.to_datetime(followups_df['next_followup_date'], utc=True)
-        wib_tz = pytz.timezone("Asia/Jakarta")
-        today = pd.Timestamp.now(tz=wib_tz).normalize()
-        next_7_days = today + pd.Timedelta(days=7)
-        upcoming_df = followups_df[
-            (followups_df['next_followup_date'] >= today) &
-            (followups_df['next_followup_date'] <= next_7_days)
-        ].sort_values(by='next_followup_date')
-
-        if not upcoming_df.empty:
-            display_cols_fu = ['next_followup_date', 'prospect_name', 'marketer_username', 'next_action']
-            upcoming_display_df = upcoming_df[display_cols_fu].rename(columns={
-                'next_followup_date': 'Tanggal', 'prospect_name': 'Prospek',
-                'marketer_username': 'Marketing', 'next_action': 'Tindakan'
-            })
-            upcoming_display_df['Tanggal'] = pd.to_datetime(upcoming_display_df['Tanggal']).dt.tz_localize('UTC').dt.tz_convert(pytz.timezone("Asia/Jakarta")).dt.strftime('%A, %d %b %Y')
-            st.dataframe(upcoming_display_df, use_container_width=True, hide_index=True)
-        else:
-            st.info("Tidak ada jadwal follow-up dalam 7 hari ke depan.")
+            fu_time_display = fu.get('created_at', 'Waktu tidak tersedia')
+            if fu.get('created_at'):
+                try:
+                    fu_time_display = convert_to_wib_and_format(fu['created_at'])
+                except Exception:
+                    pass
+            with st.container(border=True):
+                st.markdown(f"**{fu_time_display} WIB oleh {fu['marketer_username']}**")
+                st.markdown(f"**Catatan:** {fu['notes']}")
+                st.caption(f"Tindak Lanjut: {fu.get('next_action', 'N/A')} | Jadwal: {fu.get('next_followup_date', 'N/A')} | Minat: {fu.get('interest_level', 'N/A')}")
 
     # --- Sinkron dari Apollo.io (Superadmin Only) ---
     if profile.get('role') == 'superadmin':
@@ -659,7 +648,8 @@ def page_prospect_research():
             next_step_db = prospect.get('next_step_date')
             next_step_ui = str_to_date(next_step_db) if next_step_db else None
             next_step_date = st.date_input("Tanggal Follow-up")
-            status = st.selectbox("Status Prospek", ["baru", "dalam_proses", "berhasil", "gagal"], index=0)
+            status = st.selectbox("Status Prospek", ["baru", "dalam_proses", "berhasil", "gagal"],
+                                 index=0)
             source = st.text_input("Sumber Prospek", value="manual")
             submitted = st.form_submit_button("Simpan Prospek")
             if submitted:

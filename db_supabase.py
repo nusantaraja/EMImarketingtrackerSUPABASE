@@ -79,31 +79,6 @@ def get_all_profiles():
         return []
 
 
-def sign_up(email, password, full_name, role):
-    supabase = init_connection()
-    try:
-        # Daftar via Auth
-        response = supabase.auth.sign_up({
-            "email": email,
-            "password": password,
-            "options": {
-                "data": {
-                    "full_name": full_name,
-                    "role": role
-                }
-            }
-        })
-        user = response.user
-
-        if not user:
-            return None, "Gagal membuat akun."
-
-        return user, None
-    except Exception as e:
-        error_message = str(e.args[0]['message']) if e.args and isinstance(e.args[0], dict) else str(e)
-        return None, error_message
-
-
 # --- Marketing Activities CRUD ---
 def get_all_marketing_activities():
     supabase = init_connection()
@@ -179,7 +154,6 @@ def edit_marketing_activity(activity_id, prospect_name, prospect_location, conta
     except Exception as e:
         return False, f"Gagal memperbarui aktivitas: {e}"
 
-
 def delete_marketing_activity(activity_id):
     supabase = init_connection()
     try:
@@ -189,8 +163,6 @@ def delete_marketing_activity(activity_id):
     except Exception as e:
         return False, f"Gagal menghapus aktivitas: {e}"
 
-
-# --- Follow-up CRUD ---
 def get_followups_by_activity_id(activity_id):
     supabase = init_connection()
     try:
@@ -199,7 +171,6 @@ def get_followups_by_activity_id(activity_id):
     except Exception as e:
         st.error(f"Error ambil follow-up: {e}")
         return []
-
 
 def add_followup(activity_id, marketer_id, notes, next_action, next_followup_date, interest_level, new_status_key):
     supabase = init_connection()
@@ -224,8 +195,6 @@ def add_followup(activity_id, marketer_id, notes, next_action, next_followup_dat
     except Exception as e:
         return False, f"Gagal menambahkan follow-up: {e}"
 
-
-# --- Riset Prospek CRUD ---
 def get_all_prospect_research():
     supabase = init_connection()
     try:
@@ -234,7 +203,6 @@ def get_all_prospect_research():
     except Exception as e:
         st.error(f"Error mengambil riset prospek: {e}")
         return []
-
 
 def get_prospect_research_by_marketer(marketer_id):
     supabase = init_connection()
@@ -245,7 +213,6 @@ def get_prospect_research_by_marketer(marketer_id):
         st.error(f"Error mengambil prospek per marketing: {e}")
         return []
 
-
 def search_prospect_research(query):
     supabase = init_connection()
     try:
@@ -254,7 +221,6 @@ def search_prospect_research(query):
     except Exception as e:
         st.error(f"Error pencarian prospek: {e}")
         return []
-
 
 def add_prospect_research(**kwargs):
     supabase = init_connection()
@@ -290,7 +256,6 @@ def add_prospect_research(**kwargs):
     except Exception as e:
         return False, f"Gagal menyimpan prospek: {e}"
 
-
 def edit_prospect_research(prospect_id, **kwargs):
     supabase = init_connection()
     try:
@@ -321,7 +286,6 @@ def edit_prospect_research(prospect_id, **kwargs):
     except Exception as e:
         return False, f"Gagal memperbarui prospek: {e}"
 
-
 def delete_prospect_by_id(prospect_id):
     supabase = init_connection()
     try:
@@ -330,52 +294,6 @@ def delete_prospect_by_id(prospect_id):
     except Exception as e:
         return False, f"Gagal menghapus prospek: {e}"
 
-
-def sync_prospect_from_apollo(query):
-    apollo_api_key = st.secrets["apollo"].get("api_key")
-    if not apollo_api_key:
-        st.error("API Key Apollo.io tidak ditemukan di secrets.")
-        return []
-
-    url = "https://api.apollo.io/v1/organizations" 
-    headers = {"Content-Type": "application/json"}
-    params = {
-        "api_key": apollo_api_key,
-        "page": 1,
-        "q_organization": query,
-        "num_fetch_per_page": 50
-    }
-
-    try:
-        response = requests.post(url, json=params, headers=headers)
-        if response.status_code == 200:
-            data = response.json().get("organizations", [])
-            return [{
-                "company_name": org.get("name"),
-                "website": org.get("website_url"),
-                "industry": org.get("organization_industry_tag", {}).get("tag"),
-                "founded_year": org.get("founded_year"),
-                "company_size": org.get("team_size"),
-                "location": org.get("city"),
-                "contact_name": org.get("contacts", [{}])[0].get("contact", {}).get("full_name"),
-                "contact_title": org.get("contacts", [{}])[0].get("contact", {}).get("title"),
-                "contact_email": org.get("contacts", [{}])[0].get("contact", {}).get("email"),
-                "phone": org.get("contacts", [{}])[0].get("contact", {}).get("phone"),
-                "linkedin_url": org.get("contacts", [{}])[0].get("contact", {}).get("linkedin_url"),
-                "technology_used": org.get("technologies", []),
-                "keywords": [],
-                "source": "apollo.io",
-                "status": "baru"
-            } for org in data]
-        else:
-            st.error(f"Apollo API Error: {response.text}")
-            return []
-    except Exception as e:
-        st.error(f"Gagal sinkron dengan Apollo.io: {e}")
-        return []
-
-
-# --- Zoho Mail Setup ---
 def exchange_code_for_tokens(code):
     zoho_secrets = st.secrets["zoho"]
     token_url = "https://accounts.zoho.com/oauth/v2/token" 
@@ -393,7 +311,6 @@ def exchange_code_for_tokens(code):
             tokens = response.json()
             st.secrets["zoho"]["access_token"] = tokens.get("access_token")
             st.secrets["zoho"]["refresh_token"] = tokens.get("refresh_token")
-            st.success("Token berhasil diperbarui.")
             return True, "Token berhasil diperbarui."
         else:
             st.error(f"Gagal mendapatkan access token: {response.text}")
@@ -428,7 +345,7 @@ def refresh_zoho_token():
 def send_email_via_zoho(email_data):
     access_token = st.secrets["zoho"].get("access_token")
     from_email = st.secrets["zoho"].get("from_email")
-    
+
     if not access_token or not from_email:
         return False, "Zoho token atau alamat email tidak tersedia."
 
@@ -454,22 +371,3 @@ def send_email_via_zoho(email_data):
     except Exception as e:
         return False, f"Gagal mengirim email: {e}"
 
-
-# --- App Config ---
-def get_app_config():
-    supabase = init_connection()
-    try:
-        response = supabase.from_("config").select("*").eq("key", "app_name").single().execute()
-        return {"app_name": response.data['value']}
-    except Exception:
-        return {"app_name": "EMI Marketing Tracker"}
-
-
-def update_app_config(new_config):
-    supabase = init_connection()
-    try:
-        for key, value in new_config.items():
-            supabase.from_("config").upsert({"key": key, "value": value}, returning='minimal').execute()
-        return True, "Pengaturan berhasil diperbarui."
-    except Exception as e:
-        return False, f"Gagal memperbarui pengaturan: {e}"

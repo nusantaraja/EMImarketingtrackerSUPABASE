@@ -16,7 +16,7 @@ STATUS_MAPPING = {'baru': 'Baru', 'dalam_proses': 'Dalam Proses', 'berhasil': 'B
 REVERSE_STATUS_MAPPING = {v: k for k, v in STATUS_MAPPING.items()}
 ACTIVITY_TYPES = ["Presentasi", "Demo Produk", "Follow-up Call", "Email", "Meeting", "Lainnya"]
 
-# --- Helper Fungsi Waktu & Tanggal ---
+# --- Helper untuk Waktu & Tanggal ---
 def convert_to_wib_and_format(iso_string, format_str='%A, %d %b %Y, %H:%M'):
     """Konversi waktu UTC ke WIB"""
     if not iso_string:
@@ -40,6 +40,22 @@ def str_to_date(s):
     return datetime.strptime(s, "%Y-%m-%d").date() if s else None
 
 
+# --- Helper untuk Role Profesional ---
+def get_professional_role(role):
+    """Map role ke tampilan profesional"""
+    role_mapping = {
+        "superadmin": "CEO/Founder",
+        "marketing": "Marketing Manager",
+        "sales": "Sales Executive",
+        "cfo": "Chief Financial Officer",
+        "finance": "Finance Manager",
+        "it": "IT Manager",
+        "tech": "Technology Lead",
+        "engineer": "Technical Specialist"
+    }
+    return role_mapping.get(role.lower(), role.capitalize())
+
+
 # --- Helper Template Email ---
 def generate_html_email_template(prospect, role=None, industry=None, follow_up_number=None):
     contact_name = prospect.get("contact_name", "Bapak/Ibu")
@@ -47,6 +63,7 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
     location = prospect.get("location", "Lokasi")
     next_step = prospect.get("next_step", "baru")
 
+    # --- Default Template ---
     default_template = f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
     <h2 style="color: #1f77b4;">Penawaran Solusi AI Voice untuk {company_name}</h2>
     

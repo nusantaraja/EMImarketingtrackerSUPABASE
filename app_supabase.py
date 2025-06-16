@@ -47,7 +47,6 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
     location = prospect.get("location", "Lokasi")
     next_step = prospect.get("next_step", "baru")
 
-    # --- Default Template ---
     default_template = f"""<div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
     <h2 style="color: #1f77b4;">Penawaran Solusi AI Voice untuk {company_name}</h2>
     
@@ -59,7 +58,7 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
 
     <br>
     <p><strong>{st.session_state.profile.get("full_name", "Tim EMI")}</strong><br>
-    <em>{st.session_state.profile.get("role", "")}</em></p>
+    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
 
     <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
     <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
@@ -83,7 +82,7 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
     <p>Apakah Anda tertarik untuk diskusi singkat? Saya siap jelaskan bagaimana solusi ini bisa bekerja untuk bisnis Anda.</p>
     <br>
     <p><strong>{st.session_state.profile.get("full_name", "Tim EMI")}</strong><br>
-    <em>{st.session_state.profile.get("role", "")}</em></p>
+    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
     <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
     <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
 </div>""".strip()
@@ -104,7 +103,7 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
     <p>Jika tertarik, saya siap bantu Anda lihat simulasi efisiensi biaya yang bisa dicapai melalui demo singkat.</p>
     <br>
     <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
-    <em>{st.session_state.profile.get("role", "")}</em></p>
+    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
     <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
     <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
 </div>""".strip()
@@ -117,7 +116,7 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
     <p>Jika tertarik, silakan balas email ini atau kontak saya via {prospect.get('phone', '')}.</p>
     <br>
     <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
-    <em>{st.session_state.profile.get("role", "")}</em></p>
+    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
     <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
     <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
 </div>""".strip()
@@ -133,7 +132,7 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
     <p>Jika tertarik, silakan balas email ini atau kontak saya via {prospect.get('phone', '')}.</p>
     <br>
     <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
-    <em>{st.session_state.profile.get("role", "")}</em></p>
+    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
     <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
     <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
 </div>""".strip()
@@ -146,7 +145,7 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
     <p>Silakan balas email ini untuk diskusi lebih lanjut.</p>
     <br>
     <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
-    <em>{st.session_state.profile.get("role", "")}</em></p>
+    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
     <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
     <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
 </div>""".strip()
@@ -166,7 +165,7 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
     <p>Silakan balas email ini untuk diskusi lebih lanjut.</p>
     <br>
     <p><strong>{st.session_state.profile.get("full_name", "Tim EMI")}</strong><br>
-    <em>{st.session_state.profile.get("role", "")}</em></p>
+    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
     <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
     <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
 </div>""".strip()
@@ -179,7 +178,7 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
     <p>Apakah Anda tertarik untuk diskusi singkat?</p>
     <br>
     <p><strong>{st.session_state.profile.get("full_name", "Tim EMI")}</strong><br>
-    <em>{st.session_state.profile.get("role", "")}</em></p>
+    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
     <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
     <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
 </div>""".strip()
@@ -198,7 +197,7 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
     <p>Jika ada pertanyaan atau butuh info lebih lanjut, jangan ragu untuk balas email ini.</p>
     <br>
     <p><strong>{st.session_state.profile.get("full_name", "EMI Marketing Team")}</strong><br>
-    <em>{st.session_state.profile.get("role", "")}</em></p>
+    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
     <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
     <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
 </div>""".strip()
@@ -211,7 +210,7 @@ def generate_html_email_template(prospect, role=None, industry=None, follow_up_n
     <p>Silakan balas email ini atau kontak saya via {prospect.get('phone', st.session_state.profile.get('email'))}.</p>
     <br>
     <p><strong>{st.session_state.profile.get("full_name", "Tim EMI")}</strong><br>
-    <em>{st.session_state.profile.get("role", "")}</em></p>
+    <em>{get_professional_role(st.session_state.profile.get("role", ""))}</em></p>
     <hr style="margin-top: 30px; border: none; border-top: 1px solid #ccc;">
     <p style="font-size: 0.9em; color: #555;">Dikirim via EMI Marketing Tracker</p>
 </div>""".strip()
@@ -757,6 +756,17 @@ def page_prospect_research():
             st.divider()
             st.subheader("Template Email Profesional")
 
+            def get_professional_role(role):
+                """Map role ke tampilan profesional"""
+                role_mapping = {
+                    "superadmin": "CEO/Founder",
+                    "marketing": "Marketing Manager",
+                    "sales": "Sales Executive",
+                    # Tambahkan role lain sesuai kebutuhan
+                }
+                return role_mapping.get(role.lower(), role.capitalize())
+                professional_role = get_professional_role(st.session_state.profile.get("role", ""))
+
             # Hitung jumlah follow-up yang sudah dikirim
             followups = db.get_followups_by_activity_id(prospect['id'])
             followup_count = len(followups)
@@ -799,7 +809,6 @@ def page_prospect_research():
                         st.success(msg)
                     else:
                         st.error(msg)
-
 # --- Pengaturan Aplikasi ---
 def page_settings():
     st.title("Pengaturan Aplikasi")

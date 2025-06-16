@@ -219,25 +219,29 @@ def page_dashboard():
         else:
             st.info("Tidak ada jadwal follow-up dalam 7 hari ke depan.")
 
-    # SINKRON APOLLO.IO - DIKEMBALIKAN UTUH
-    st.divider()
+    # SINKRON DARI APOLLO.IO
+st.divider()
+# --- PERUBAHAN DI SINI ---
+# Cek apakah role adalah superadmin ATAU manager
+if st.session_state.profile.get('role') in ['superadmin', 'manager']:
     st.subheader("Sinkron dari Apollo.io")
-    if st.session_state.profile.get('role') == 'superadmin':
-        apollo_query = st.text_input("Masukkan query pencarian (misal: industry:Technology AND location:Jakarta)")
-        if st.button("Tarik Data dari Apollo.io"):
-            with st.spinner("Menarik data dari Apollo.io..."):
-                raw_prospects = db.sync_prospect_from_apollo(apollo_query)
-                if raw_prospects:
-                    saved_count = 0
-                    for p in raw_prospects:
-                        success, msg = db.add_prospect_research(**p)
-                        if success: saved_count += 1
-                    st.success(f"{saved_count} prospek berhasil ditarik dan disimpan.")
-                    st.rerun()
-                else:
-                    st.info("Tidak ada prospek baru yang ditemukan.")
-    else:
-        st.info("Fitur sinkronisasi dari Apollo.io hanya tersedia untuk Superadmin.")
+    apollo_query = st.text_input("Masukkan query pencarian (misal: industry:Technology AND location:Jakarta)")
+    if st.button("Tarik Data dari Apollo.io"):
+        with st.spinner("Menarik data dari Apollo.io..."):
+            raw_prospects = db.sync_prospect_from_apollo(apollo_query)
+            if raw_prospects:
+                saved_count = 0
+                for p in raw_prospects:
+                    # Logika ini sudah benar, karena prospek akan di-assign ke
+                    # user yang sedang login (superadmin/manager)
+                    success, msg = db.add_prospect_research(**p)
+                    if success:
+                        saved_count += 1
+                st.success(f"{saved_count} prospek berhasil ditarik dan disimpan ke akun Anda.")
+                st.rerun()
+            else:
+                st.info("Tidak ada prospek baru yang ditemukan.")
+# --- BLOK 'ELSE' DIHAPUS, JADI MARKETING TIDAK MELIHAT APA-APA ---
 
 
 # --- Manajemen Aktivitas Pemasaran ---

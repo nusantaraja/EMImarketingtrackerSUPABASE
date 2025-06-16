@@ -4,8 +4,8 @@ import plotly.express as px
 from datetime import datetime, date
 import db_supabase as db
 import pytz
-import requests
 from urllib.parse import urlencode
+import requests
 
 
 # --- Konfigurasi Halaman ---
@@ -345,7 +345,7 @@ def page_dashboard():
     st.divider()
     st.subheader("Aktivitas Terbaru")
     latest_activities = df.head(5).copy()
-    latest_activities['Waktu Dibuat'] = latest_activities['created_at'].apply(lambda x: convert_to_wib_and_format(x, format_str='%d %b %Y, %H:%M'))
+    latest_activities['Waktu Dibuat'] = latest_activities['created_at'].apply(lambda x: convert_to_wib_and_format(x, '%d %b %Y, %H:%M'))
     display_cols = ['Waktu Dibuat', 'prospect_name', 'marketer_username', 'status']
     latest_activities_display = latest_activities[display_cols].rename(columns={
         'prospect_name': 'Prospek', 'marketer_username': 'Marketing', 'status': 'Status'
@@ -361,16 +361,29 @@ def page_dashboard():
         st.info("Tidak ada jadwal follow-up yang ditemukan.")
     else:
         for fu in all_followups:
-            fu_time_display = fu.get('created_at', 'Waktu tidak tersedia')
-            if fu.get('created_at'):
-                try:
-                    fu_time_display = convert_to_wib_and_format(fu['created_at'])
-                except Exception:
-                    pass
-            with st.container(border=True):
-                st.markdown(f"**{fu_time_display} WIB oleh {fu['marketer_username']}**")
-                st.markdown(f"**Catatan:** {fu['notes']}")
-                st.caption(f"Tindak Lanjut: {fu.get('next_action', 'N/A')} | Jadwal: {fu.get('next_followup_date', 'N/A')} | Minat: {fu.get('interest_level', 'N/A')}")
+            fu['prospect_name'] = next((act['prospect_name'] for act in activities if act['id'] == fu['activity_id']), 'N/A')
+        followups_df = pd.DataFrame(all_followups)
+        followups_df['next_followup_date'] = pd.to_datetime(followups_df['next_followup_date'], utc=True)
+        wib_tz = pytz.timezone("Asia/Jakarta")
+        today = pd.Timestamp.now(tz=wib_tz).normalize()
+        next_7_days = today + pd.Timedelta(days=7)
+        upcoming_df = followups_df[
+            (followups_df['next_followup_date'] >= today) &
+            (followups_df['next_followup_date'] <= next_7_days)
+        ].sort_values(by='next_followup_date')
+
+        if not upcoming_df.empty:
+            display_cols_fu = ['next_followup_date', 'prospect_name', 'marketer_username', 'next_action']
+            upcoming_display_df = upcoming_df[display_cols_fu].rename(columns={
+                'next_followup_date': 'Tanggal',
+                'prospect_name': 'Prospek',
+                'marketer_username': 'Marketing',
+                'next_action': 'Tindakan'
+            })
+            upcoming_display_df['Tanggal'] = pd.to_datetime(upcoming_display_df['Tanggal']).dt.tz_localize('UTC').dt.tz_convert(pytz.timezone("Asia/Jakarta")).dt.strftime('%A, %d %b %Y')
+            st.dataframe(upcoming_display_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("Tidak ada jadwal follow-up dalam 7 hari ke depan.")
 
     # --- Sinkron dari Apollo.io (Superadmin Only) ---
     if profile.get('role') == 'superadmin':
@@ -423,8 +436,12 @@ def page_activities_management():
     if not paginated_df.empty:
         display_cols = ['activity_date', 'prospect_name', 'prospect_location', 'marketer_username', 'activity_type', 'status']
         paginated_df_display = paginated_df[display_cols].rename(columns={
-            'activity_date': 'Tanggal', 'prospect_name': 'Prospek', 'prospect_location': 'Lokasi',
-            'marketer_username': 'Marketing', 'activity_type': 'Jenis', 'status': 'Status'
+            'activity_date': 'Tanggal',
+            'prospect_name': 'Prospek',
+            'prospect_location': 'Lokasi',
+            'marketer_username': 'Marketing',
+            'activity_type': 'Jenis',
+            'status': 'Status'
         })
         paginated_df_display['Status'] = paginated_df_display['Status'].map(STATUS_MAPPING)
         st.dataframe(paginated_df_display, use_container_width=True, hide_index=True)
@@ -605,7 +622,7 @@ def page_prospect_research():
 
     df = pd.DataFrame(filtered_prospects)
 
-    # Cek kolom status
+    # Cek apakah kolom status tersedia
     if 'status' not in df.columns:
         st.error("Kolom 'status' tidak ditemukan di data prospek. Pastikan database memiliki kolom 'status'.")
         st.stop()
@@ -648,8 +665,7 @@ def page_prospect_research():
             next_step_db = prospect.get('next_step_date')
             next_step_ui = str_to_date(next_step_db) if next_step_db else None
             next_step_date = st.date_input("Tanggal Follow-up")
-            status = st.selectbox("Status Prospek", ["baru", "dalam_proses", "berhasil", "gagal"],
-                                 index=0)
+            status = st.selectbox("Status Prospek", ["baru", "dalam_proses", "berhasil", "gagal"], index=0)
             source = st.text_input("Sumber Prospek", value="manual")
             submitted = st.form_submit_button("Simpan Prospek")
             if submitted:
@@ -753,9 +769,7 @@ def page_prospect_research():
                             next_step=next_step,
                             next_step_date=next_step_date_str,
                             status=status,
-                            source=source,
-                            decision_maker=False,
-                            email_status="valid"
+                            source=source
                         )
 
                         if success:
@@ -862,7 +876,7 @@ def get_authorization_url():
         "response_type": "code",
         "client_id": st.secrets["zoho"]["client_id"],
         "scope": "ZohoMail.send,ZohoMail.read",
-        "redirect_uri": st.secrets["zoho"].get("redirect_uri", "https://emimtsupabase.streamlit.app/oauth/callback") 
+        "redirect_uri": st.secrets["zoho"].get("redirect_uri", "https://emimtsupabase.streamlit.app/") 
     }
     base_url = "https://accounts.zoho.com/oauth/v2/auth?"
     return base_url + urlencode(params)

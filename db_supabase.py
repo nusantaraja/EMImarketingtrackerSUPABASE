@@ -68,6 +68,39 @@ def page_user_management():
                 else:
                     st.error(f"Gagal mendaftarkan: {error}")
 
+def sign_up(email, password, full_name, role):
+    supabase = init_connection()
+    try:
+        # Daftar via Auth + simpan ke tabel profiles
+        response = supabase.auth.sign_up({
+            "email": email,
+            "password": password,
+            "options": {
+                "data": {
+                    "full_name": full_name,
+                    "role": role
+                }
+            }
+        })
+        user = response.user
+
+        if not user:
+            return None, "Gagal membuat akun."
+
+        # Simpan ke tabel profiles
+        profile_data = {
+            "id": user.id,
+            "full_name": full_name,
+            "role": role,
+            "email": email
+        }
+        supabase.from_("profiles").insert(profile_data).execute()
+
+        return user, None
+    except Exception as e:
+        error_message = str(e.args[0]['message']) if e.args and isinstance(e.args[0], dict) else str(e)
+        return None, error_message
+
 
 def get_all_profiles():
     supabase = init_connection()
@@ -227,7 +260,6 @@ def add_prospect_research(**kwargs):
     try:
         data_to_insert = {
             "marketer_id": kwargs.get("marketer_id"),
-            "marketer_username": kwargs.get("marketer_username"),
             "company_name": kwargs.get("company_name"),
             "website": kwargs.get("website"),
             "industry": kwargs.get("industry"),

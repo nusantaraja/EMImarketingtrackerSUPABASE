@@ -3,6 +3,7 @@ from supabase import create_client, Client
 from datetime import datetime
 import requests
 import toml
+import pandas as pd
 
 
 # --- Koneksi ke Supabase ---

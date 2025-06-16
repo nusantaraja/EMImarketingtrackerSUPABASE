@@ -79,7 +79,6 @@ def generate_html_email_template(prospect, user_profile):
     # 2. Jika yang login adalah Manager
     elif sender_role == 'manager':
         sender_title = "AI Solutions Manager, Solusi AI Indonesia"
-        # Manajer bisa menambahkan LinkedIn mereka di profil nanti jika perlu
         
         email_body = f"""
         <p>Perkenalkan, saya <strong>{sender_name}</strong>, AI Solutions Manager dari <strong>Solusi AI Indonesia</strong>.</p>
@@ -103,6 +102,10 @@ def generate_html_email_template(prospect, user_profile):
     
     full_html = f"""
     <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        
+        <!-- INI BAGIAN YANG DIPERBARUI -->
+        <h2 style="color: #1f77b4;">Penawaran AI untuk {company_name}</h2>
+        
         <p>Yth. Bapak/Ibu <strong>{contact_name}</strong>,</p>
         
         {email_body}

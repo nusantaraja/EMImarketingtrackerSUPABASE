@@ -400,75 +400,43 @@ def page_user_management():
     profile = st.session_state.profile
     user = st.session_state.user
     
-    # Ambil data pengguna berdasarkan role
-    if profile.get('role') == 'superadmin':
-        profiles_data = db.get_all_profiles()
-    elif profile.get('role') == 'manager':
-        profiles_data = db.get_team_profiles(user.id)
-    else:
-        st.error("Anda tidak memiliki akses ke halaman ini.")
-        return
+    if profile.get('role') == 'superadmin': profiles_data = db.get_all_profiles()
+    elif profile.get('role') == 'manager': profiles_data = db.get_team_profiles(user.id)
+    else: st.error("Anda tidak memiliki akses."); return
 
     tab1, tab2 = st.tabs(["Daftar Pengguna", "Tambah Pengguna Baru"])
-
     with tab1:
-        st.subheader("Daftar Pengguna Terdaftar")
         if profiles_data:
             df = pd.DataFrame(profiles_data)
-            # Membuat kolom 'Nama Manajer' dari data relasi
-            df['Nama Manajer'] = df.get('manager', pd.Series(dtype='object')).apply(
-                lambda x: x['full_name'] if isinstance(x, dict) and x else 'N/A'
-            )
-            # Menampilkan data
-            st.dataframe(df[['full_name', 'email', 'role', 'Nama Manajer']].rename(columns={
-                'full_name': 'Nama Lengkap', 
-                'role': 'Role', 
-                'email': 'Email'
-            }), use_container_width=True, hide_index=True)
-        else:
-            st.info("Belum ada pengguna terdaftar di tim Anda.")
-
+            df['Nama Manajer'] = df.get('manager', pd.Series(dtype='object')).apply(lambda x: x['full_name'] if isinstance(x, dict) and x else 'N/A')
+            st.dataframe(df[['id', 'full_name', 'email', 'role', 'Nama Manajer']].rename(columns={'id': 'User ID', 'full_name': 'Nama Lengkap', 'role': 'Role', 'email': 'Email'}), use_container_width=True)
+        else: st.info("Belum ada pengguna terdaftar.")
     with tab2:
         st.subheader("Form Tambah Pengguna Baru")
-        with st.form("add_user_form", clear_on_submit=True):
+        with st.form("add_user_form"):
             full_name = st.text_input("Nama Lengkap")
             email = st.text_input("Email")
-            password = st.text_input("Password Sementara", type="password")
-            
-            # Opsi role bergantung pada role pengguna saat ini
+            password = st.text_input("Password", type="password")
             role_options = ["manager", "marketing"] if profile.get('role') == 'superadmin' else ["marketing"]
             role = st.selectbox("Role", role_options)
-            
             manager_id = None
             if role == 'marketing':
-                # Jika superadmin, bisa memilih manajer
                 if profile.get('role') == 'superadmin':
                     managers = db.get_all_managers()
-                    if not managers:
-                        st.warning("Belum ada Manajer. Buat user dengan role 'manager' terlebih dahulu.")
-                        manager_id = None # Tidak bisa lanjut jika tidak ada manajer
+                    if not managers: st.warning("Belum ada Manajer. Buat user dengan role 'manager' terlebih dahulu.")
                     else:
                         manager_options = {mgr['id']: mgr['full_name'] for mgr in managers}
-                        manager_id = st.selectbox("Pilih Manajer", options=list(manager_options.keys()), format_func=lambda x: manager_options[x])
-                # Jika manager, otomatis menjadi manajer user baru
-                else: # role == 'manager'
+                        manager_id = st.selectbox("Pilih Manajer", options=manager_options.keys(), format_func=lambda x: manager_options[x])
+                else:
                     manager_id = user.id
                     st.info(f"Anda ({profile.get('full_name')}) akan menjadi manajer untuk pengguna baru ini.")
             
-            submitted = st.form_submit_button("Daftarkan Pengguna Baru")
-            if submitted:
-                if not all([full_name, email, password]):
-                    st.error("Semua kolom (Nama, Email, Password) wajib diisi!")
-                elif role == 'marketing' and manager_id is None:
-                    st.error("Pengguna 'marketing' harus memiliki seorang Manajer. Silakan pilih manajer.")
+            if st.form_submit_button("Daftarkan Pengguna Baru"):
+                if not all([full_name, email, password]): st.error("Semua field wajib diisi!")
                 else:
-                    with st.spinner("Mendaftarkan pengguna..."):
-                        new_user, error = db.create_user_as_admin(email, password, full_name, role, manager_id)
-                        if new_user:
-                            st.success(f"Pengguna '{full_name}' berhasil didaftarkan.")
-                            st.rerun() # Refresh halaman untuk menampilkan pengguna baru di tabel
-                        else:
-                            st.error(f"Gagal mendaftarkan pengguna: {error}")
+                    new_user, error = db.create_user_as_admin(email, password, full_name, role, manager_id)
+                    if new_user: st.success(f"Pengguna {full_name} berhasil didaftarkan."); st.rerun()
+                    else: st.error(f"Gagal mendaftarkan: {error}")
 
 def page_settings():
     st.title("Pengaturan Aplikasi")

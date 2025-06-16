@@ -1,8 +1,8 @@
-# --- START OF FILE db_supabase.py (Versi Perbaikan Kinerja & Final) ---
+# --- START OF FILE db_supabase.py (Lengkap & Final) ---
 
 import streamlit as st
 from supabase import create_client, Client
-from datetime import datetime, date
+from datetime import datetime
 import requests
 import toml
 
@@ -50,14 +50,14 @@ def get_profile(user_id):
 def get_all_profiles():
     supabase = init_connection()
     try:
-        return supabase.from_("profiles").select("*, manager:manager_id(full_name)").order("full_name", ascending=True).execute().data
+        return supabase.from_("profiles").select("*, manager:manager_id(full_name)").execute().data
     except Exception as e:
         st.error(f"Gagal mengambil data pengguna: {e}"); return []
 
 def get_team_profiles(manager_id):
     supabase = init_connection()
     try:
-        return supabase.from_("profiles").select("*, manager:manager_id(full_name)").or_(f"id.eq.{manager_id},manager_id.eq.{manager_id}").order("full_name", ascending=True).execute().data
+        return supabase.from_("profiles").select("*, manager:manager_id(full_name)").or_(f"id.eq.{manager_id},manager_id.eq.{manager_id}").execute().data
     except Exception as e:
         st.error(f"Gagal mengambil data tim: {e}"); return []
 
@@ -85,11 +85,8 @@ def get_marketing_activities_by_user_id(user_id):
 def get_team_marketing_activities(manager_id):
     supabase = init_connection()
     try:
-        # PERBAIKAN: Kembali ke logika efisien, query ID secara langsung
-        team_member_data = supabase.from_("profiles").select("id").eq("manager_id", manager_id).execute().data
-        team_ids = [m['id'] for m in team_member_data]
+        team_ids = [m['id'] for m in supabase.from_("profiles").select("id").eq("manager_id", manager_id).execute().data]
         team_ids.append(manager_id)
-        
         return supabase.from_("marketing_activities").select("*").in_("marketer_id", team_ids).order("created_at", desc=True).execute().data
     except Exception as e:
         st.error(f"Gagal mengambil data aktivitas tim: {e}"); return []
@@ -100,14 +97,11 @@ def get_activity_by_id(activity_id):
         return supabase.from_("marketing_activities").select("*").eq("id", activity_id).single().execute().data
     except Exception as e:
         st.error(f"Error mengambil detail aktivitas: {e}"); return None
-        
-def date_to_str(dt):
-    return dt.strftime("%Y-%m-%d") if isinstance(dt, (date, datetime)) else dt
 
 def add_marketing_activity(marketer_id, marketer_username, prospect_name, prospect_location, contact_person, contact_position, contact_phone, contact_email, activity_date, activity_type, description, status):
     supabase = init_connection()
     try:
-        data = {"marketer_id": marketer_id, "marketer_username": marketer_username, "prospect_name": prospect_name, "prospect_location": prospect_location, "contact_person": contact_person, "contact_position": contact_position, "contact_phone": contact_phone, "contact_email": contact_email, "activity_date": date_to_str(activity_date), "activity_type": activity_type, "description": description, "status": status}
+        data = {"marketer_id": marketer_id, "marketer_username": marketer_username, "prospect_name": prospect_name, "prospect_location": prospect_location, "contact_person": contact_person, "contact_position": contact_position, "contact_phone": contact_phone, "contact_email": contact_email, "activity_date": activity_date, "activity_type": activity_type, "description": description, "status": status}
         response = supabase.from_("marketing_activities").insert(data).execute()
         return True, "Aktivitas berhasil ditambahkan!", response.data[0]["id"]
     except Exception as e:
@@ -116,7 +110,7 @@ def add_marketing_activity(marketer_id, marketer_username, prospect_name, prospe
 def edit_marketing_activity(activity_id, prospect_name, prospect_location, contact_person, contact_position, contact_phone, contact_email, activity_date, activity_type, description, status):
     supabase = init_connection()
     try:
-        data = {"prospect_name": prospect_name, "prospect_location": prospect_location, "contact_person": contact_person, "contact_position": contact_position, "contact_phone": contact_phone, "contact_email": contact_email, "activity_date": date_to_str(activity_date), "activity_type": activity_type, "description": description, "status": status}
+        data = {"prospect_name": prospect_name, "prospect_location": prospect_location, "contact_person": contact_person, "contact_position": contact_position, "contact_phone": contact_phone, "contact_email": contact_email, "activity_date": activity_date, "activity_type": activity_type, "description": description, "status": status}
         supabase.from_("marketing_activities").update(data).eq("id", activity_id).execute()
         return True, "Aktivitas berhasil diperbarui."
     except Exception as e:
@@ -126,7 +120,7 @@ def edit_marketing_activity(activity_id, prospect_name, prospect_location, conta
 def get_followups_by_activity_id(activity_id):
     supabase = init_connection()
     try:
-        return supabase.from_("followups").select("*").eq("activity_id", str(activity_id)).order("created_at", desc=True).execute().data
+        return supabase.from_("followups").select("*").eq("activity_id", str(activity_id)).execute().data
     except Exception as e:
         st.error(f"Error mengambil data follow-up: {e}"); return []
 
@@ -158,11 +152,8 @@ def get_prospect_research_by_marketer(marketer_id):
 def get_team_prospect_research(manager_id):
     supabase = init_connection()
     try:
-        # PERBAIKAN: Kembali ke logika efisien, query ID secara langsung
-        team_member_data = supabase.from_("profiles").select("id").eq("manager_id", manager_id).execute().data
-        team_ids = [m['id'] for m in team_member_data]
+        team_ids = [m['id'] for m in supabase.from_("profiles").select("id").eq("manager_id", manager_id).execute().data]
         team_ids.append(manager_id)
-        
         return supabase.from_("prospect_research").select("*").in_("marketer_id", team_ids).order("created_at", desc=True).execute().data
     except Exception as e:
         st.error(f"Gagal mengambil data riset prospek tim: {e}"); return []
@@ -245,6 +236,7 @@ def refresh_zoho_token():
         response = requests.post(url, data=payload)
         if response.status_code == 200:
             tokens = response.json()
+            # Ini tidak akan berfungsi di Streamlit Cloud, tapi kita coba saja
             st.secrets["zoho"]["access_token"] = tokens.get("access_token", "")
             return True, "Token berhasil diperbarui!"
         else: return False, f"Gagal memperbarui token: {response.text}"
@@ -276,6 +268,7 @@ def exchange_code_for_tokens(code):
         response = requests.post(url, data=payload)
         if response.status_code == 200:
             tokens = response.json()
+            # Ini tidak akan berfungsi di Streamlit Cloud, tapi kita coba saja
             st.secrets["zoho"]["access_token"] = tokens.get("access_token", "")
             if "refresh_token" in tokens: st.secrets["zoho"]["refresh_token"] = tokens.get("refresh_token", "")
             return True, "Token berhasil digenerate!"

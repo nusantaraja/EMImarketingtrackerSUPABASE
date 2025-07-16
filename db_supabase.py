@@ -107,18 +107,51 @@ def get_activity_by_id(activity_id):
         return supabase.from_("marketing_activities").select("*").eq("id", activity_id).maybe_single().execute().data
     except Exception as e: st.error(f"Error mengambil detail aktivitas: {e}"); return None
 
-def add_marketing_activity(marketer_id, marketer_username, prospect_name, **kwargs):
+def add_marketing_activity(
+    marketer_id, marketer_username, prospect_name, prospect_location, 
+    contact_person, contact_position, contact_phone, contact_email, 
+    activity_date, activity_type, description, status
+):
+    """
+    Menambahkan satu catatan aktivitas pemasaran ke database.
+    Menerima semua argumen secara eksplisit.
+    """
     supabase = init_connection()
+
+    # Validasi data penting sebelum mengirim
     if not all([marketer_id, marketer_username, prospect_name]):
-        st.error("Gagal menambahkan aktivitas: ID, Nama Marketing, dan Nama Prospek tidak boleh kosong.")
-        return False, "Data penting tidak lengkap.", None
+        error_msg = "Data krusial (ID Marketing, Username, Nama Prospek) tidak boleh kosong."
+        return False, error_msg, None
+
     try:
-        data = {"marketer_id": marketer_id, "marketer_username": marketer_username, "prospect_name": prospect_name, **kwargs}
+        # Siapkan data dictionary dari semua argumen
+        data = {
+            "marketer_id": marketer_id,
+            "marketer_username": marketer_username,
+            "prospect_name": prospect_name,
+            "prospect_location": prospect_location,
+            "contact_person": contact_person,
+            "contact_position": contact_position,
+            "contact_phone": contact_phone,
+            "contact_email": contact_email,
+            "activity_date": activity_date,
+            "activity_type": activity_type,
+            "description": description,
+            "status": status
+        }
+        
+        # Eksekusi perintah insert
         response = supabase.from_("marketing_activities").insert(data).execute()
+        
+        # Cek apakah data berhasil ditambahkan dan kembalikan ID baru
         if response.data and len(response.data) > 0:
             return True, "Aktivitas berhasil ditambahkan!", response.data[0].get("id")
-        else: return False, "Gagal menambahkan aktivitas. Cek RLS atau log di Supabase.", None
-    except Exception as e: return False, f"Gagal menambahkan aktivitas: {e}", None
+        else:
+            # Error ini biasanya terjadi karena RLS yang memblokir INSERT
+            return False, "Gagal menambahkan aktivitas ke database. Periksa kebijakan RLS (INSERT).", None
+
+    except Exception as e:
+        return False, f"Gagal menambahkan aktivitas: {e}", None
 
 def edit_marketing_activity(activity_id, **kwargs):
     if not activity_id: return False, "ID Aktivitas tidak valid."

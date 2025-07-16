@@ -112,6 +112,7 @@ def show_sidebar():
             st.rerun()
         return page
 
+@st.cache_data(ttl=600)
 def get_data_based_on_role():
     user = st.session_state.user
     profile = st.session_state.profile

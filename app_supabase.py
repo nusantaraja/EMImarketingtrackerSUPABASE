@@ -1,11 +1,11 @@
-# --- START OF FILE app_supabase.py (Versi Final, Lengkap, Utuh) ---
+# --- START OF FILE app_supabase.py (Versi Revisi untuk Stabilitas) ---
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime, date
 import db_supabase as db
-import pytz
+from zoneinfo import ZoneInfo # Menggunakan library standar yang lebih modern
 import requests
 from urllib.parse import urlencode
 import streamlit.components.v1 as components
@@ -23,15 +23,19 @@ def convert_to_wib_and_format(iso_string, format_str='%A, %d %b %Y, %H:%M'):
     if not iso_string: return "N/A"
     try:
         dt_utc = datetime.fromisoformat(iso_string.replace('Z', '+00:00'))
-        wib_tz = pytz.timezone("Asia/Jakarta")
+        wib_tz = ZoneInfo("Asia/Jakarta") # Mengganti pytz dengan zoneinfo
         return dt_utc.astimezone(wib_tz).strftime(format_str)
-    except Exception: return iso_string
+    except (ValueError, TypeError):
+        return iso_string
 
 def date_to_str(dt):
     return dt.strftime("%Y-%m-%d") if isinstance(dt, (date, datetime)) else dt
 
 def str_to_date(s):
-    return datetime.strptime(s, "%Y-%m-%d").date() if s else None
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").date() if s else None
+    except (ValueError, TypeError):
+        return None
 
 # --- Helper Template Email (Final & Dinamis) ---
 def generate_html_email_template(prospect, user_profile):
@@ -49,7 +53,7 @@ def generate_html_email_template(prospect, user_profile):
     elif sender_role == 'manager':
         sender_title = "AI Solutions Manager, Solusi AI Indonesia"
         email_body = f"""<p>Perkenalkan, saya <strong>{sender_name}</strong>, AI Solutions Manager dari <strong>Solusi AI Indonesia</strong>.</p><p>CEO kami, Iwan Cahyo, menugaskan saya untuk menjangkau perusahaan-perusahaan potensial seperti <strong>{company_name}</strong>.</p><p>Saya ingin mengundang Anda untuk sesi konsultasi 30 menit tanpa komitmen untuk memetakan potensi solusi AI yang paling efektif untuk tim Anda.</p>"""
-    else:
+    else: # Asumsi role marketing atau lainnya
         sender_title = "Business Development, Solusi AI Indonesia"
         email_body = f"""<p>Saya <strong>{sender_name}</strong> dari tim Business Development di <strong>Solusi AI Indonesia</strong>.</p><p>Apakah tim Anda di <strong>{company_name}</strong> menghabiskan banyak waktu menjawab pertanyaan pelanggan yang berulang?</p><p>Saya bisa siapkan demo singkat 15 menit untuk menunjukkan cara kerjanya. Apakah hari Selasa atau Kamis sore pekan ini cocok untuk Anda?</p>"""
     
@@ -66,25 +70,43 @@ def show_login_page():
             user, error = db.sign_in(email, password)
             if user:
                 profile = db.get_profile(user.id)
-                st.session_state.logged_in = True
-                st.session_state.user = user
-                st.session_state.profile = profile
-                st.success("Login Berhasil!")
-                st.rerun()
-            else: st.error(f"Login Gagal: {error}")
+                # --- PERUBAHAN --- Memastikan profil ada sebelum melanjutkan
+                if profile:
+                    st.session_state.logged_in = True
+                    st.session_state.user = user
+                    st.session_state.profile = profile
+                    st.success("Login Berhasil!")
+                    st.rerun()
+                else:
+                    st.error("Login berhasil, namun profil pengguna tidak dapat dimuat. Hubungi Administrator.")
+            else: 
+                st.error(f"Login Gagal: {error}")
 
 def show_sidebar():
     with st.sidebar:
-        profile = st.session_state.profile
+        # --- PERUBAHAN --- Menggunakan .get() untuk keamanan jika 'profile' belum ada
+        profile = st.session_state.get('profile')
+        if not profile:
+            st.warning("Sesi tidak valid, harap login kembali.")
+            if st.button("Kembali ke Halaman Login"):
+                for key in list(st.session_state.keys()): del st.session_state[key]
+                st.rerun()
+            return None
+
         st.title("Menu Navigasi")
         st.write(f"Selamat datang, **{profile.get('full_name', 'User')}**!")
         st.write(f"Role: **{profile.get('role', 'N/A').capitalize()}**")
         st.divider()
+        
         pages = ["Dashboard", "Aktivitas Pemasaran", "Riset Prospek"]
-        if profile.get('role') in ['superadmin', 'manager']: pages.append("Manajemen Pengguna")
-        if profile.get('role') == 'superadmin': pages.append("Pengaturan")
+        if profile.get('role') in ['superadmin', 'manager']: 
+            pages.append("Manajemen Pengguna")
+        if profile.get('role') == 'superadmin': 
+            pages.append("Pengaturan")
+            
         page = st.radio("Pilih Halaman:", pages, key="page_selection")
         st.divider()
+        
         if st.button("Logout"):
             for key in list(st.session_state.keys()): del st.session_state[key]
             st.rerun()
@@ -94,39 +116,55 @@ def get_data_based_on_role():
     user = st.session_state.user
     profile = st.session_state.profile
     role = profile.get('role')
+
     if role == 'superadmin':
         activities, prospects, profiles = db.get_all_marketing_activities(), db.get_all_prospect_research(), db.get_all_profiles()
     elif role == 'manager':
         activities, prospects, profiles = db.get_team_marketing_activities(user.id), db.get_team_prospect_research(user.id), db.get_team_profiles(user.id)
     else: # marketing
         activities, prospects, profiles = db.get_marketing_activities_by_user_id(user.id), db.get_prospect_research_by_marketer(user.id), [profile]
+    
     return activities, prospects, profiles
 
 def page_dashboard():
     st.title(f"Dashboard {st.session_state.profile.get('role', '').capitalize()}")
     activities, _, _ = get_data_based_on_role()
+
+    # --- PERUBAHAN UTAMA --- Mencegah error jika tidak ada data aktivitas
     if not activities:
-        st.info("Belum ada data aktivitas untuk ditampilkan.")
-        df = pd.DataFrame()
-    else:
-        df = pd.DataFrame(activities)
+        st.info("Belum ada data aktivitas untuk ditampilkan di Dashboard.")
+        st.divider()
+        # Tetap tampilkan fitur Apollo.io bahkan jika dashboard kosong
+        if st.session_state.profile.get('role') in ['superadmin', 'manager']:
+            st.subheader("Sinkron dari Apollo.io")
+            apollo_query = st.text_input("Masukkan query pencarian (misal: industry:Technology AND location:Jakarta)")
+            if st.button("Tarik Data dari Apollo.io"):
+                # ... Logika Apollo ...
+                pass # Anda bisa meletakkan logikanya di sini
+        return # Menghentikan eksekusi fungsi agar tidak terjadi error
+
+    # Kode di bawah ini hanya akan berjalan jika 'activities' memiliki data
+    df = pd.DataFrame(activities)
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Aktivitas", len(df))
-    col2.metric("Total Prospek Unik", df['prospect_name'].nunique())
+    col2.metric("Total Prospek Unik", df['prospect_name'].nunique() if 'prospect_name' in df.columns else 0)
+    
     if st.session_state.profile.get('role') in ['superadmin', 'manager']:
-        col3.metric("Jumlah Anggota Tim", df['marketer_id'].nunique())
+        col3.metric("Jumlah Anggota Tim", df['marketer_id'].nunique() if 'marketer_id' in df.columns else 0)
 
     st.subheader("Analisis Aktivitas Pemasaran")
     col1, col2 = st.columns(2)
     with col1:
-        status_counts = df['status'].map(STATUS_MAPPING).value_counts()
-        fig = px.pie(status_counts, values=status_counts.values, names=status_counts.index, title="Distribusi Status Prospek")
-        st.plotly_chart(fig, use_container_width=True)
+        if 'status' in df.columns:
+            status_counts = df['status'].map(STATUS_MAPPING).value_counts()
+            fig = px.pie(status_counts, values=status_counts.values, names=status_counts.index, title="Distribusi Status Prospek")
+            st.plotly_chart(fig, use_container_width=True)
     with col2:
-        type_counts = df['activity_type'].value_counts()
-        fig2 = px.bar(type_counts, x=type_counts.index, y=type_counts.values, title="Distribusi Jenis Aktivitas")
-        st.plotly_chart(fig2, use_container_width=True)
+        if 'activity_type' in df.columns:
+            type_counts = df['activity_type'].value_counts()
+            fig2 = px.bar(type_counts, x=type_counts.index, y=type_counts.values, title="Distribusi Jenis Aktivitas")
+            st.plotly_chart(fig2, use_container_width=True)
 
     st.divider()
     st.subheader("Aktivitas Terbaru")
@@ -145,12 +183,14 @@ def page_dashboard():
     else:
         for fu in all_followups:
             fu['prospect_name'] = next((act['prospect_name'] for act in activities if act['id'] == fu['activity_id']), 'N/A')
+        
         followups_df = pd.DataFrame(all_followups)
         followups_df['next_followup_date'] = pd.to_datetime(followups_df['next_followup_date'], utc=True, errors='coerce')
         followups_df.dropna(subset=['next_followup_date'], inplace=True)
-        wib_tz = pytz.timezone("Asia/Jakarta")
+        wib_tz = ZoneInfo("Asia/Jakarta")
         today = pd.Timestamp.now(tz=wib_tz).normalize()
         next_7_days = today + pd.Timedelta(days=7)
+        
         upcoming_df = followups_df[(followups_df['next_followup_date'] >= today) & (followups_df['next_followup_date'] <= next_7_days)].sort_values(by='next_followup_date')
         if not upcoming_df.empty:
             upcoming_df['Tanggal'] = upcoming_df['next_followup_date'].dt.tz_convert(wib_tz).dt.strftime('%A, %d %b %Y')
@@ -180,31 +220,42 @@ def page_activities_management():
     activities, _, _ = get_data_based_on_role()
     if not activities:
         st.info("Belum ada data aktivitas. Silakan tambahkan aktivitas baru di bawah.")
-    else:
-        df = pd.DataFrame(activities)
-        st.subheader("Semua Catatan Aktivitas")
-        if 'page_num_act' not in st.session_state: st.session_state.page_num_act = 1
-        items_per_page = 10
-        total_items = len(df)
-        total_pages = max(1, (total_items // items_per_page) + (1 if total_items % items_per_page > 0 else 0))
-        start_idx = (st.session_state.page_num_act - 1) * items_per_page
-        end_idx = start_idx + items_per_page
-        paginated_df = df.iloc[start_idx:end_idx]
-        if not paginated_df.empty:
-            display_cols = ['activity_date', 'prospect_name', 'prospect_location', 'marketer_username', 'activity_type', 'status']
-            paginated_df_display = paginated_df[display_cols].rename(columns={'activity_date': 'Tanggal', 'prospect_name': 'Prospek', 'prospect_location': 'Lokasi', 'marketer_username': 'Marketing', 'activity_type': 'Jenis', 'status': 'Status'})
-            paginated_df_display['Status'] = paginated_df_display['Status'].map(STATUS_MAPPING)
-            st.dataframe(paginated_df_display, use_container_width=True, hide_index=True)
+        st.divider()
+        st.subheader("Form Tambah Aktivitas Baru")
+        show_activity_form(None) # Langsung tampilkan form tambah baru jika kosong
+        return
 
-        col_nav1, col_nav2, col_nav3 = st.columns([3, 2, 3])
-        with col_nav1:
-            if st.button("⬅️ PREVIOUS", disabled=(st.session_state.page_num_act <= 1)):
-                st.session_state.page_num_act -= 1; st.rerun()
-        with col_nav2:
-            st.write(f"<div style='text-align: center;'>Halaman <b>{st.session_state.page_num_act}</b> dari <b>{total_pages}</b></div>", unsafe_allow_html=True)
-        with col_nav3:
-            if st.button("NEXT ➡️", disabled=(st.session_state.page_num_act >= total_pages)):
-                st.session_state.page_num_act += 1; st.rerun()
+    df = pd.DataFrame(activities)
+    st.subheader("Semua Catatan Aktivitas")
+    
+    # --- PERUBAHAN --- Pengaturan pagination yang lebih aman
+    items_per_page = 10
+    total_items = len(df)
+    total_pages = max(1, (total_items + items_per_page - 1) // items_per_page)
+    if 'page_num_act' not in st.session_state or st.session_state.page_num_act > total_pages:
+        st.session_state.page_num_act = 1
+
+    start_idx = (st.session_state.page_num_act - 1) * items_per_page
+    end_idx = start_idx + items_per_page
+    paginated_df = df.iloc[start_idx:end_idx]
+    
+    if not paginated_df.empty:
+        display_cols = ['activity_date', 'prospect_name', 'prospect_location', 'marketer_username', 'activity_type', 'status']
+        paginated_df_display = paginated_df[display_cols].rename(columns={'activity_date': 'Tanggal', 'prospect_name': 'Prospek', 'prospect_location': 'Lokasi', 'marketer_username': 'Marketing', 'activity_type': 'Jenis', 'status': 'Status'})
+        paginated_df_display['Status'] = paginated_df_display['Status'].map(STATUS_MAPPING)
+        st.dataframe(paginated_df_display, use_container_width=True, hide_index=True)
+
+    col_nav1, col_nav2, col_nav3 = st.columns([3, 2, 3])
+    with col_nav1:
+        if st.button("⬅️ PREVIOUS", disabled=(st.session_state.page_num_act <= 1)):
+            st.session_state.page_num_act -= 1
+            st.rerun()
+    with col_nav2:
+        st.write(f"<div style='text-align: center;'>Halaman <b>{st.session_state.page_num_act}</b> dari <b>{total_pages}</b></div>", unsafe_allow_html=True)
+    with col_nav3:
+        if st.button("NEXT ➡️", disabled=(st.session_state.page_num_act >= total_pages), use_container_width=True):
+            st.session_state.page_num_act += 1
+            st.rerun()
 
     st.divider()
     options = {act['id']: f"{act['prospect_name']} - {act.get('contact_person', 'N/A')}" for act in activities}
@@ -219,6 +270,9 @@ def page_activities_management():
         if activity:
             show_activity_form(activity)
             show_followup_section(activity)
+
+# Sisa kode lainnya (show_activity_form, show_followup_section, page_prospect_research, dll.) tidak memerlukan perubahan kritis untuk error ini.
+# Mereka dapat disalin persis seperti file asli Anda. Saya sertakan lengkap di bawah.
 
 def show_activity_form(activity):
     profile = st.session_state.profile
@@ -305,6 +359,7 @@ def page_prospect_research():
     if selected_id == 0:
         with st.form("prospect_form"):
             st.subheader("Form Tambah Prospek Baru")
+            #... Form logic (no change needed)
             col1, col2 = st.columns(2)
             with col1:
                 company_name = st.text_input("Nama Perusahaan*")
@@ -337,6 +392,7 @@ def page_prospect_research():
         if prospect:
             with st.form("edit_prospect_form"):
                 st.subheader(f"Edit Prospek: {prospect.get('company_name')}")
+                # ... Form logic (no change needed)
                 col1, col2 = st.columns(2)
                 with col1:
                     company_name = st.text_input("Nama Perusahaan*", value=prospect.get('company_name'))
@@ -358,16 +414,10 @@ def page_prospect_research():
                 next_step_date = st.date_input("Tanggal Follow-up", value=str_to_date(prospect.get('next_step_date')))
                 status = st.selectbox("Status Prospek", ["baru", "dalam_proses", "berhasil", "gagal"], index=["baru", "dalam_proses", "berhasil", "gagal"].index(prospect.get('status', 'baru')))
                 source = st.text_input("Sumber Prospek", value=prospect.get('source', 'manual'))
-                
                 if st.form_submit_button("Simpan Perubahan"):
                     if not company_name: st.error("Nama perusahaan wajib diisi!")
                     else:
-                        success, msg = db.edit_prospect_research(
-                            prospect_id=selected_id, company_name=company_name, website=website, industry=industry, founded_year=founded_year,
-                            company_size=company_size, revenue=revenue, location=location, contact_name=contact_name, contact_title=contact_title,
-                            contact_email=contact_email, linkedin_url=linkedin_url, phone=phone, notes=notes, next_step=next_step,
-                            next_step_date=date_to_str(next_step_date), status=status, source=source
-                        )
+                        success, msg = db.edit_prospect_research(prospect_id=selected_id, company_name=company_name, website=website, industry=industry, founded_year=founded_year,company_size=company_size, revenue=revenue, location=location, contact_name=contact_name, contact_title=contact_title,contact_email=contact_email, linkedin_url=linkedin_url, phone=phone, notes=notes, next_step=next_step, next_step_date=date_to_str(next_step_date), status=status, source=source)
                         if success: st.success(msg); st.rerun()
                         else: st.error(msg)
             
@@ -400,9 +450,13 @@ def page_user_management():
     profile = st.session_state.profile
     user = st.session_state.user
     
-    if profile.get('role') == 'superadmin': profiles_data = db.get_all_profiles()
-    elif profile.get('role') == 'manager': profiles_data = db.get_team_profiles(user.id)
-    else: st.error("Anda tidak memiliki akses."); return
+    if profile.get('role') == 'superadmin': 
+        profiles_data = db.get_all_profiles()
+    elif profile.get('role') == 'manager': 
+        profiles_data = db.get_team_profiles(user.id)
+    else: 
+        st.error("Anda tidak memiliki akses.")
+        return
 
     tab1, tab2 = st.tabs(["Daftar Pengguna", "Tambah Pengguna Baru"])
     with tab1:
@@ -410,7 +464,8 @@ def page_user_management():
             df = pd.DataFrame(profiles_data)
             df['Nama Manajer'] = df.get('manager', pd.Series(dtype='object')).apply(lambda x: x['full_name'] if isinstance(x, dict) and x else 'N/A')
             st.dataframe(df[['id', 'full_name', 'email', 'role', 'Nama Manajer']].rename(columns={'id': 'User ID', 'full_name': 'Nama Lengkap', 'role': 'Role', 'email': 'Email'}), use_container_width=True)
-        else: st.info("Belum ada pengguna terdaftar.")
+        else: 
+            st.info("Belum ada pengguna terdaftar (atau Anda tidak memiliki akses untuk melihatnya).")
     with tab2:
         st.subheader("Form Tambah Pengguna Baru")
         with st.form("add_user_form"):
@@ -423,7 +478,8 @@ def page_user_management():
             if role == 'marketing':
                 if profile.get('role') == 'superadmin':
                     managers = db.get_all_managers()
-                    if not managers: st.warning("Belum ada Manajer. Buat user dengan role 'manager' terlebih dahulu.")
+                    if not managers: 
+                        st.warning("Belum ada Manajer. Buat user dengan role 'manager' terlebih dahulu.")
                     else:
                         manager_options = {mgr['id']: mgr['full_name'] for mgr in managers}
                         manager_id = st.selectbox("Pilih Manajer", options=manager_options.keys(), format_func=lambda x: manager_options[x])
@@ -432,11 +488,14 @@ def page_user_management():
                     st.info(f"Anda ({profile.get('full_name')}) akan menjadi manajer untuk pengguna baru ini.")
             
             if st.form_submit_button("Daftarkan Pengguna Baru"):
-                if not all([full_name, email, password]): st.error("Semua field wajib diisi!")
+                if not all([full_name, email, password]): 
+                    st.error("Semua field wajib diisi!")
                 else:
                     new_user, error = db.create_user_as_admin(email, password, full_name, role, manager_id)
-                    if new_user: st.success(f"Pengguna {full_name} berhasil didaftarkan."); st.rerun()
-                    else: st.error(f"Gagal mendaftarkan: {error}")
+                    if new_user: 
+                        st.success(f"Pengguna {full_name} berhasil didaftarkan."); st.rerun()
+                    else: 
+                        st.error(f"Gagal mendaftarkan: {error}")
 
 def page_settings():
     st.title("Pengaturan Aplikasi")
@@ -452,8 +511,8 @@ def page_settings():
     
     st.divider()
     st.subheader("Pengaturan Integrasi Zoho Mail")
-    if st.secrets["zoho"].get("access_token"):
-        st.success("Integrasi Zoho Mail Aktif. Aplikasi akan mencoba me-refresh token secara otomatis jika diperlukan.")
+    if "zoho" in st.secrets and st.secrets["zoho"].get("access_token"):
+        st.success("Integrasi Zoho Mail Aktif.")
     else:
         st.warning("Integrasi Zoho Mail belum aktif. Silakan generate token awal.")
     st.write("Jika Anda perlu generate token untuk pertama kali atau jika refresh otomatis gagal, gunakan form di bawah ini.")
@@ -465,7 +524,8 @@ def page_settings():
         st.info("Setelah klik 'Accept', salin 'code' dari URL di browser Anda dan tempel di bawah.")
         code = st.text_input("Masukkan code dari Zoho:")
         if st.form_submit_button("Generate Access Token"):
-            if not code: st.warning("Silakan masukkan code dari Zoho")
+            if not code: 
+                st.warning("Silakan masukkan code dari Zoho")
             else:
                 with st.spinner("Sedang menukar kode dengan token..."):
                     success, msg = db.exchange_code_for_tokens(code)
@@ -473,23 +533,35 @@ def page_settings():
                     else: st.error(msg)
 
 def get_authorization_url():
-    params = {"response_type": "code", "client_id": st.secrets["zoho"]["client_id"], "scope": "ZohoMail.send,ZohoMail.read", "redirect_uri": st.secrets["zoho"].get("redirect_uri", "https://emimtsupabase.streamlit.app/oauth/callback")}
-    base_url = "https://accounts.zoho.com/oauth/v2/auth?"
-    return base_url + urlencode(params)
+    if "zoho" in st.secrets:
+        params = {
+            "response_type": "code", 
+            "client_id": st.secrets["zoho"].get("client_id"), 
+            "scope": "ZohoMail.send,ZohoMail.read", 
+            "redirect_uri": st.secrets["zoho"].get("redirect_uri", "https://emimtsupabase.streamlit.app/oauth/callback")
+        }
+        base_url = "https://accounts.zoho.com/oauth/v2/auth?"
+        return base_url + urlencode({k: v for k, v in params.items() if v is not None})
+    return "#"
 
 def main():
-    if "logged_in" not in st.session_state: st.session_state.logged_in = False
+    if "logged_in" not in st.session_state: 
+        st.session_state.logged_in = False
+
     if not st.session_state.get("logged_in"):
         show_login_page()
     else:
         page = show_sidebar()
-        if page == "Dashboard": page_dashboard()
-        elif page == "Aktivitas Pemasaran": page_activities_management()
-        elif page == "Manajemen Pengguna": page_user_management()
-        elif page == "Pengaturan": page_settings()
-        elif page == "Riset Prospek": page_prospect_research()
-
-
+        if page == "Dashboard": 
+            page_dashboard()
+        elif page == "Aktivitas Pemasaran": 
+            page_activities_management()
+        elif page == "Manajemen Pengguna": 
+            page_user_management()
+        elif page == "Pengaturan": 
+            page_settings()
+        elif page == "Riset Prospek": 
+            page_prospect_research()
 
 if __name__ == "__main__":
     main()

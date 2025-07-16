@@ -203,18 +203,32 @@ def page_dashboard():
     st.divider()
     if st.session_state.profile.get('role') in ['superadmin', 'manager']:
         st.subheader("Sinkron dari Apollo.io")
-        apollo_query = st.text_input("Masukkan query pencarian (misal: industry:Technology AND location:Jakarta)")
+        apollo_query = st.text_input("Masukkan query pencarian Apollo.io", placeholder="Contoh: location:indonesia")
+        
         if st.button("Tarik Data dari Apollo.io"):
-            with st.spinner("Menarik data dari Apollo.io..."):
-                raw_prospects = db.sync_prospect_from_apollo(apollo_query)
+            st.info("Tombol ditekan! Memulai proses sinkronisasi...") # CHECKPOINT 1
+            if not apollo_query:
+                st.warning("Query pencarian tidak boleh kosong.")
+            else:
+                with st.spinner("Menghubungi Apollo.io... Ini mungkin butuh beberapa saat."):
+                    st.info(f"Mengirim query: '{apollo_query}' ke Apollo...") # CHECKPOINT 2
+                    
+                    raw_prospects = db.sync_prospect_from_apollo(apollo_query)
+                    
+                    st.info(f"Proses selesai. Apollo mengembalikan {len(raw_prospects)} data.") # CHECKPOINT 3
+                    st.write(raw_prospects) # --- DEBUG --- Tampilkan data mentah yang kembali
+
                 if raw_prospects:
+                    st.info("Mencoba menyimpan prospek ke database...") # CHECKPOINT 4
                     saved_count = 0
                     for p in raw_prospects:
                         success, _ = db.add_prospect_research(**p)
-                        if success: saved_count += 1
-                    st.success(f"{saved_count} prospek berhasil ditarik dan disimpan.")
+                        if success:
+                            saved_count += 1
+                    st.success(f"{saved_count} dari {len(raw_prospects)} prospek berhasil ditarik dan disimpan.")
                     st.rerun()
-                else: st.info("Tidak ada prospek baru yang ditemukan.")
+                else:
+                    st.info("Tidak ada prospek baru yang cocok dengan query Anda di Apollo.") # CHECKPOINT 5
 
 def page_activities_management():
     st.title("Manajemen Aktivitas Pemasaran")

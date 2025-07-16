@@ -101,11 +101,26 @@ def get_team_marketing_activities(manager_id):
     except Exception as e: st.error(f"Gagal mengambil data aktivitas tim: {e}"); return []
 
 def get_activity_by_id(activity_id):
-    if not activity_id: return None
+    """
+    Mengambil satu detail aktivitas berdasarkan ID-nya.
+    Lebih aman dan tidak akan crash jika ID tidak ditemukan.
+    """
+    # Selalu validasi ID di awal
+    if not activity_id:
+        return None
+        
     supabase = init_connection()
     try:
-        return supabase.from_("marketing_activities").select("*").eq("id", activity_id).maybe_single().execute().data
-    except Exception as e: st.error(f"Error mengambil detail aktivitas: {e}"); return None
+        # Menggunakan .maybe_single() akan mengembalikan None jika data tidak ada, tanpa error.
+        response = supabase.from_("marketing_activities").select("*").eq("id", activity_id).maybe_single().execute()
+        
+        # response.data akan berisi dictionary jika ditemukan, atau None jika tidak.
+        return response.data
+
+    except Exception as e:
+        # Menangkap error lain seperti masalah koneksi atau RLS
+        st.error(f"Error saat mengambil detail aktivitas: {e}")
+        return None
 
 def add_marketing_activity(
     marketer_id, marketer_username, prospect_name, prospect_location, 

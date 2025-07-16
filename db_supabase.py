@@ -202,12 +202,44 @@ def edit_prospect_research(prospect_id, **kwargs):
     except Exception as e:
         return False, f"Gagal memperbarui prospek: {e}"
 
-def search_prospect_research(keyword):
+def search_prospect_research(keyword: str):
+    """
+    Mencari prospek berdasarkan beberapa kata kunci.
+    Setiap kata kunci akan diterapkan sebagai filter AND.
+    """
     supabase = init_connection()
     try:
-        return supabase.from_("prospect_research").select("*").or_(f"company_name.ilike.%{keyword}%,contact_name.ilike.%{keyword}%,industry.ilike.%{keyword}%,location.ilike.%{keyword}%").execute().data
+        # 1. Bersihkan dan pecah input menjadi kata kunci terpisah
+        # Mengganti koma dengan spasi, lalu memecah berdasarkan spasi
+        keywords = [k.strip() for k in keyword.replace(",", " ").split() if k.strip()]
+
+        # Jika tidak ada kata kunci setelah dibersihkan, kembalikan daftar kosong
+        if not keywords:
+            return []
+
+        # 2. Mulai query dasar
+        query = supabase.from_("prospect_research").select("*")
+
+        # 3. Terapkan filter untuk SETIAP kata kunci
+        # Ini akan membuat rantai filter: .or_(filter_untuk_kata1).or_(filter_untuk_kata2)
+        # yang berfungsi sebagai (Kondisi Kata 1) AND (Kondisi Kata 2)
+        for k in keywords:
+            or_filter_string = (
+                f"company_name.ilike.%{k}%,"
+                f"contact_name.ilike.%{k}%,"
+                f"industry.ilike.%{k}%,"
+                f"location.ilike.%{k}%"
+            )
+            query = query.or_(or_filter_string)
+
+        # 4. Eksekusi query yang sudah lengkap
+        response = query.execute()
+        return response.data
+
     except Exception as e:
-        st.error(f"Error saat mencari prospek: {e}"); return []
+        # Memberikan detail error jika ada masalah
+        st.error(f"Error saat mencari prospek: {e}")
+        return []
 
 # --- Sinkronisasi dari Apollo.io ---
 def sync_prospect_from_apollo(query):

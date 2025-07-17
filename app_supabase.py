@@ -449,22 +449,28 @@ def page_prospect_research():
                     with st.spinner("Menyimpan prospek..."):
                         # Memastikan data pengguna ada sebelum dikirim
                         user_id = st.session_state.user.id
-                        marketer_name = profile.get("full_name")
-                        
-                        success, msg = db.add_prospect_research(
-                            company_name=company_name, website=website, industry=industry,
-                            founded_year=founded_year, company_size=company_size, revenue=revenue,
-                            location=location, contact_name=contact_name, contact_title=contact_title,
-                            contact_email=contact_email, linkedin_url=linkedin_url, phone=phone,
-                            notes=notes, next_step=next_step, next_step_date=date_to_str(next_step_date),
-                            status=status, source=source,
-                            marketer_id=user_id, marketer_username=marketer_name
-                        )
-                        if success:
-                            st.success(msg)
-                            clear_all_cache() # Hapus cache agar daftar prospek diperbarui
+                        marketer_name = st.session_state.profile.get("full_name")
+
+                        if not user_id or not marketer_name:
+                            st.error("Gagal mendapatkan informasi pengguna. Coba login ulang.")
                         else:
-                            st.error(f"Gagal menyimpan: {msg}")
+                            success, msg = db.add_prospect_research(
+                                # Data dari form
+                                company_name=company_name, website=website, industry=industry, 
+                                founded_year=founded_year, company_size=company_size, revenue=revenue, 
+                                location=location, contact_name=contact_name, contact_title=contact_title, 
+                                contact_email=contact_email, linkedin_url=linkedin_url, phone=phone, 
+                                notes=notes, next_step=next_step, next_step_date=date_to_str(next_step_date), 
+                                status=status, source=source, 
+                                # Data pengguna yang login (kunci untuk lolos RLS)
+                                marketer_id=user_id, 
+                                marketer_username=marketer_name
+                            )
+                            if success:
+                                st.success(msg)
+                                clear_all_cache() # Hapus cache agar daftar prospek diperbarui
+                            else:
+                                st.error(f"Gagal menyimpan: {msg}")
     
     # === FORM EDIT PROSPEK (LENGKAP) ===
     else:

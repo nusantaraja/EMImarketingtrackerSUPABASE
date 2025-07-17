@@ -296,33 +296,47 @@ def page_activities_management():
 def show_activity_form(activity):
     profile = st.session_state.profile
     user = st.session_state.user
-    with st.form(key=f"activity_form_{'edit' if activity else 'add'}", clear_on_submit=False):
+
+    # Menggunakan key yang unik agar form di-reset dengan benar
+    form_key = f"activity_form_{activity.get('id') if activity else 'add'}"
+
+    with st.form(key=form_key, clear_on_submit=False):
         st.subheader("Form Tambah/Edit Aktivitas Baru")
         
-        # --- Field dari Riset Prospek ditambahkan di sini ---
+        # --- Bagian Informasi Prospek (LENGKAP) ---
         st.write("**Informasi Prospek & Perusahaan**")
         col1, col2 = st.columns(2)
         with col1:
             prospect_name = st.text_input("Nama Perusahaan (Prospek)*", value=activity.get('prospect_name', '') if activity else "")
-            website = st.text_input("Website", value=activity.get('website', '') if activity else "") # Asumsi kolom ada
-            industry = st.text_input("Industri", value=activity.get('industry', '') if activity else "") # Asumsi kolom ada
+            website = st.text_input("Website", value=activity.get('website', '') if activity else "")
+            industry = st.text_input("Industri", value=activity.get('industry', '') if activity else "")
+            founded_year = st.number_input("Tahun Berdiri", min_value=1900, max_value=datetime.now().year + 1, step=1, value=activity.get('founded_year') or 2000)
+            company_size = st.text_input("Jumlah Karyawan", value=activity.get('company_size', '') if activity else "Contoh: 51-200")
+            revenue = st.text_input("Pendapatan Tahunan", value=activity.get('revenue', '') if activity else "Contoh: $10M")
+            source = st.text_input("Sumber Prospek", value=activity.get('source', '') if activity else "manual")
         with col2:
             contact_person = st.text_input("Nama Kontak Person", value=activity.get('contact_person', '') if activity else "")
             contact_position = st.text_input("Jabatan Kontak", value=activity.get('contact_position', '') if activity else "")
             contact_email = st.text_input("Email Kontak", value=activity.get('contact_email', '') if activity else "")
             contact_phone = st.text_input("Telepon Kontak", value=activity.get('contact_phone', '') if activity else "")
+            linkedin_url = st.text_input("URL LinkedIn Kontak", value=activity.get('linkedin_url', '') if activity else "")
+            prospect_location = st.text_input("Lokasi Kantor (Kota/Negara)", value=activity.get('prospect_location', '') if activity else "")
 
         st.divider()
-        st.write("**Detail Aktivitas**")
+
+        # --- Bagian Detail Aktivitas (LENGKAP) ---
+        st.write("**Detail Aktivitas Pemasaran**")
         col3, col4 = st.columns(2)
         with col3:
-             activity_type = st.selectbox("Jenis Aktivitas", options=ACTIVITY_TYPES, index=ACTIVITY_TYPES.index(activity.get('activity_type')) if activity and activity.get('activity_type') in ACTIVITY_TYPES else 0)
+             activity_type_val = activity.get('activity_type') if activity else None
+             activity_type = st.selectbox("Jenis Aktivitas", options=ACTIVITY_TYPES, index=ACTIVITY_TYPES.index(activity_type_val) if activity_type_val in ACTIVITY_TYPES else 0)
         with col4:
             default_date = str_to_date(activity.get('activity_date')) if activity else date.today()
             activity_date = st.date_input("Tanggal Aktivitas", value=default_date)
 
-        description = st.text_area("Deskripsi Aktivitas", value=activity.get('description', '') if activity else "")
-        status = st.selectbox("Status Aktivitas", options=list(STATUS_MAPPING.values()), index=list(STATUS_MAPPING.values()).index(STATUS_MAPPING.get(activity.get('status', 'baru'))) if activity else 0)
+        description = st.text_area("Deskripsi Aktivitas", value=activity.get('description', '') if activity else "", height=150)
+        status_val = activity.get('status', 'baru') if activity else 'baru'
+        status = st.selectbox("Status Aktivitas", options=list(STATUS_MAPPING.values()), index=list(STATUS_MAPPING.values()).index(STATUS_MAPPING.get(status_val)))
         
         submitted = st.form_submit_button("Simpan Aktivitas")
         if submitted:
@@ -331,19 +345,21 @@ def show_activity_form(activity):
             else:
                 with st.spinner("Menyimpan..."):
                     status_key = REVERSE_STATUS_MAPPING.get(status)
-                    # Data yang dikirim ke database
+                    
+                    # Membuat dictionary data yang akan dikirim
                     data_to_send = {
-                        "prospect_name": prospect_name, "prospect_location": activity.get('prospect_location',''), # location bisa ditambahkan ke form
-                        "contact_person": contact_person, "contact_position": contact_position,
-                        "contact_phone": contact_phone, "contact_email": contact_email,
+                        "prospect_name": prospect_name, "website": website, "industry": industry,
+                        "founded_year": founded_year, "company_size": company_size, "revenue": revenue,
+                        "source": source, "contact_person": contact_person, "contact_position": contact_position,
+                        "contact_email": contact_email, "contact_phone": contact_phone, 
+                        "linkedin_url": linkedin_url, "prospect_location": prospect_location,
                         "activity_date": date_to_str(activity_date), "activity_type": activity_type,
                         "description": description, "status": status_key
                     }
 
-                    if activity: # Jika ini adalah edit
+                    if activity: # Jika ini mode edit
                         success, msg = db.edit_marketing_activity(activity['id'], **data_to_send)
-                    else: # Jika ini adalah tambah baru
-                        # Menambahkan info marketing
+                    else: # Jika ini mode tambah baru
                         data_to_send["marketer_id"] = user.id
                         data_to_send["marketer_username"] = profile.get("full_name")
                         success, msg, _ = db.add_marketing_activity(**data_to_send)

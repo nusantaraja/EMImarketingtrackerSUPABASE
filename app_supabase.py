@@ -297,18 +297,15 @@ def show_activity_form(activity):
     profile = st.session_state.profile
     user = st.session_state.user
     
-    # Menentukan apakah ini mode 'edit' atau 'add'
     is_edit_mode = activity is not None
-
     form_key = f"activity_form_{activity['id'] if is_edit_mode else 'add'}"
 
     with st.form(key=form_key, clear_on_submit=False):
-        st.subheader("Form Tambah/Edit Aktivitas Baru")
+        st.subheader("Form Tambah/Edit Aktivitas" if is_edit_mode else "Form Tambah Aktivitas Baru")
         
+        # --- Bagian Informasi Prospek ---
         st.write("**Informasi Prospek & Perusahaan**")
         col1, col2 = st.columns(2)
-        
-        # Menggunakan logika yang aman untuk mengisi nilai default
         with col1:
             prospect_name = st.text_input("Nama Perusahaan (Prospek)*", value=activity.get('prospect_name', '') if is_edit_mode else "")
             website = st.text_input("Website", value=activity.get('website', '') if is_edit_mode else "")
@@ -327,6 +324,7 @@ def show_activity_form(activity):
 
         st.divider()
 
+        # --- Bagian Detail Aktivitas ---
         st.write("**Detail Aktivitas Pemasaran**")
         col3, col4 = st.columns(2)
         with col3:
@@ -336,21 +334,23 @@ def show_activity_form(activity):
             default_date = str_to_date(activity.get('activity_date')) if is_edit_mode else date.today()
             activity_date = st.date_input("Tanggal Aktivitas", value=default_date)
 
-        description = st.text_area("Deskripsi Aktivitas", value=activity.get('description', '') if is_edit_mode else "")
+        description = st.text_area("Deskripsi Aktivitas", value=activity.get('description', '') if is_edit_mode else "", height=150)
         status_val = activity.get('status', 'baru') if is_edit_mode else 'baru'
-        # Perbaikan kecil di sini untuk mencegah error jika status tidak ada di mapping
         current_status = STATUS_MAPPING.get(status_val, "Baru")
         status_options = list(STATUS_MAPPING.values())
-        status = st.selectbox("Status Aktivitas", options=status_options, index=status_options.index(current_status) if current_status in status_options else 0)
+        status_display = st.selectbox("Status Aktivitas", options=status_options, index=status_options.index(current_status) if current_status in status_options else 0)
         
         submitted = st.form_submit_button("Simpan Aktivitas")
+        
+        # --- PERBAIKAN PENTING DI BLOK DI BAWAH INI ---
         if submitted:
             if not prospect_name:
                 st.error("Nama Perusahaan (Prospek) wajib diisi!")
             else:
                 with st.spinner("Menyimpan..."):
-         
-                    # Membuat dictionary data yang akan dikirim
+                    # 'status_key' didefinisikan DI SINI, sebelum digunakan
+                    status_key = REVERSE_STATUS_MAPPING.get(status_display)
+
                     data_to_send = {
                         "prospect_name": prospect_name, "website": website, "industry": industry,
                         "founded_year": founded_year, "company_size": company_size, "revenue": revenue,
@@ -358,7 +358,7 @@ def show_activity_form(activity):
                         "contact_email": contact_email, "contact_phone": contact_phone, 
                         "linkedin_url": linkedin_url, "prospect_location": prospect_location,
                         "activity_date": date_to_str(activity_date), "activity_type": activity_type,
-                        "description": description, "status": status_key
+                        "description": description, "status": status_key # Sekarang status_key sudah ada
                     }
 
                     if activity: # Jika ini mode edit

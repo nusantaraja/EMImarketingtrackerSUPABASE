@@ -9,6 +9,23 @@ from zoneinfo import ZoneInfo
 import requests
 from urllib.parse import urlencode
 import streamlit.components.v1 as components
+from gotrue.errors import AuthApiError
+
+def sign_in(email, password):
+    """
+    Menangani proses login pengguna dengan penanganan error yang lebih baik.
+    """
+    supabase = init_connection()
+    try:
+        response = supabase.auth.sign_in_with_password({"email": email, "password": password})
+        return response.user, None
+    except AuthApiError as e:
+        # Menangkap error spesifik dari Supabase dengan lebih aman
+        # Pesan ini sudah pasti "Invalid login credentials"
+        return None, "Kombinasi email & password salah."
+    except Exception as e:
+        # Menangkap error lainnya yang mungkin terjadi (misal masalah jaringan)
+        return None, f"Terjadi error tak terduga: {str(e)}"
 
 # --- Konfigurasi Halaman ---
 st.set_page_config(page_title="EMI Marketing Tracker", page_icon="💼", layout="wide")

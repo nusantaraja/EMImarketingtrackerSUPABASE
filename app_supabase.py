@@ -191,6 +191,42 @@ def page_dashboard():
                         st.error("❌ Koneksi internet dari server timeout. Coba lagi dalam beberapa saat.")
                     except Exception as e:
                         st.error(f"❌ Terjadi kesalahan jaringan tak terduga: {e}")
+# --- Halaman Aktivitas Pemasaran ---
+def page_activities_management():
+    st.title("Manajemen Aktivitas Pemasaran")
+    activities, _, _ = get_data_based_on_role()
+    valid_activities = [act for act in activities if act and act.get('id')]
+
+    if not valid_activities:
+        st.info("Belum ada data aktivitas. Silakan tambahkan aktivitas baru di bawah.")
+        st.divider()
+        st.subheader("Form Tambah Aktivitas Baru")
+        show_activity_form(None)
+        return
+
+    st.subheader("Semua Catatan Aktivitas")
+    df = pd.DataFrame(valid_activities)
+    df_display = df[['activity_date', 'prospect_name', 'prospect_location', 'marketer_username', 'activity_type', 'status']].rename(columns={
+        'activity_date': 'Tanggal', 'prospect_name': 'Prospek', 'prospect_location': 'Lokasi',
+        'marketer_username': 'Marketing', 'activity_type': 'Jenis', 'status': 'Status'
+    })
+    df_display['Status'] = df_display['Status'].map(STATUS_MAPPING)
+    st.dataframe(df_display, use_container_width=True, hide_index=True)
+    
+    st.divider()
+    options = {act['id']: f"{act.get('prospect_name','N/A')} - {act.get('contact_person', 'N/A')}" for act in valid_activities}
+    options[0] = "<< Tambah Aktivitas Baru >>"
+    selected_id = st.selectbox("Pilih aktivitas untuk detail/edit:", options.keys(), format_func=lambda x: options.get(x, 'N/A'), index=0, key="activity_select")
+
+    if selected_id == 0:
+        st.subheader("Form Tambah Aktivitas Baru")
+        show_activity_form(None)
+    else:
+        activity = db.get_activity_by_id(selected_id)
+        if activity:
+            show_activity_form(activity)
+            show_followup_section(activity)
+
 
 def show_activity_form(activity):
     profile = st.session_state.profile
@@ -202,31 +238,48 @@ def show_activity_form(activity):
             prospect_name = st.text_input("Nama Prospek*", value=activity.get('prospect_name', '') if activity else "")
             contact_person = st.text_input("Nama Kontak Person", value=activity.get('contact_person', '') if activity else "")
             contact_phone = st.text_input("Telepon Kontak", value=activity.get('contact_phone', '') if activity else "")
-            activity_type = st.selectbox("Jenis Aktivitas", options=ACTIVITY_TYPES, index=ACTIVITY_TYPES.index(activity['activity_type']) if activity and activity.get('activity_type') in ACTIVITY_TYPES else 0)
+            activity_type = st.selectbox("Jenis Aktivitas", options=ACTIVITY_TYPES, index=ACTIVITY_TYPES.index(activity.get('activity_type')) if activity and activity.get('activity_type') in ACTIVITY_TYPES else 0)
         with col2:
             prospect_location = st.text_input("Lokasi Prospek", value=activity.get('prospect_location', '') if activity else "")
             contact_position = st.text_input("Jabatan Kontak Person", value=activity.get('contact_position', '') if activity else "")
             contact_email = st.text_input("Email Kontak", value=activity.get('contact_email', '') if activity else "")
-            default_date = str_to_date(activity['activity_date']) if activity and activity.get('activity_date') else date.today()
+            default_date = str_to_date(activity.get('activity_date')) if activity else date.today()
             activity_date = st.date_input("Tanggal Aktivitas", value=default_date)
         
-        status_display = st.selectbox("Status", options=list(STATUS_MAPPING.values()), index=list(STATUS_MAPPING.values()).index(STATUS_MAPPING.get(activity['status'], 'baru')) if activity else 0)
+        status_display = st.selectbox("Status", options=list(STATUS_MAPPING.values()), index=list(STATUS_MAPPING.values()).index(STATUS_MAPPING.get(activity.get('status', 'baru'))) if activity else 0)
         description = st.text_area("Deskripsi", value=activity.get('description', '') if activity else "", height=150)
         
-        submitted = st.form_submit_button("Simpan Perubahan" if activity else "Simpan Aktivitas Baru")
+        submitted = st.form_submit_button("Simpan")
         if submitted:
-            if not prospect_name: st.error("Nama Prospek wajib diisi!")
+            if not prospect_name:
+                st.error("Nama Prospek wajib diisi!")
             else:
-                status_key = REVERSE_STATUS_MAPPING[status_display]
+                status_key = REVERSE_STATUS_MAPPING.get(status_display)
                 if activity:
-                    success, msg = db.edit_marketing_activity(activity['id'], prospect_name=prospect_name, prospect_location=prospect_location, contact_person=contact_person, contact_position=contact_position, contact_phone=contact_phone, contact_email=contact_email, activity_date=date_to_str(activity_date), activity_type=activity_type, description=description, status=status_key)
+                    success, msg = db.edit_marketing_activity(
+                        activity_id=activity['id'], 
+                        prospect_name=prospect_name, prospect_location=prospect_location, 
+                        contact_person=contact_person, contact_position=contact_position, 
+                        contact_phone=contact_phone, contact_email=contact_email, 
+                        activity_date=date_to_str(activity_date), activity_type=activity_type, 
+                        description=description, status=status_key
+                    )
                 else:
-                    success, msg, _ = db.add_marketing_activity(marketer_id=user.id, marketer_username=profile.get('full_name'), prospect_name=prospect_name, prospect_location=prospect_location, contact_person=contact_person, contact_position=contact_position, contact_phone=contact_phone, contact_email=contact_email, activity_date=date_to_str(activity_date), activity_type=activity_type, description=description, status=status_key)
+                    success, msg, _ = db.add_marketing_activity(
+                        marketer_id=user.id, marketer_username=profile.get('full_name'), 
+                        prospect_name=prospect_name, prospect_location=prospect_location, 
+                        contact_person=contact_person, contact_position=contact_position, 
+                        contact_phone=contact_phone, contact_email=contact_email, 
+                        activity_date=date_to_str(activity_date), activity_type=activity_type, 
+                        description=description, status=status_key
+                    )
                 if success:
                     st.success(msg)
                     clear_all_cache()
                     st.rerun()
-                else: st.error(msg)
+                else:
+                    st.error(msg)
+
 
 def show_followup_section(activity):
     st.divider()
@@ -235,23 +288,34 @@ def show_followup_section(activity):
     if followups:
         for fu in reversed(followups):
             st.markdown(f"**{convert_to_wib_and_format(fu.get('created_at'))} oleh {fu.get('marketer_username', 'N/A')}**: {fu.get('notes', 'N/A')}")
-    with st.form("new_followup_form"):
+    with st.form("new_followup_form", clear_on_submit=True):
         notes = st.text_area("Catatan Follow-up Baru*:")
         next_action = st.text_input("Rencana Tindak Lanjut")
         next_followup_date = st.date_input("Jadwal Berikutnya", value=None)
         interest_level = st.select_slider("Tingkat Ketertarikan", options=["Rendah", "Sedang", "Tinggi"], value="Sedang")
-        current_status_display = STATUS_MAPPING.get(activity.get('status', 'baru'), 'Baru')
+        current_status_display = STATUS_MAPPING.get(activity.get('status', 'baru'))
         new_status_display = st.selectbox("Update Status Prospek", options=list(STATUS_MAPPING.values()), index=list(STATUS_MAPPING.values()).index(current_status_display))
         submitted = st.form_submit_button("Simpan Follow-up")
         if submitted:
-            if not notes: st.warning("Catatan tidak boleh kosong.")
+            if not notes:
+                st.warning("Catatan tidak boleh kosong.")
             else:
-                success, msg = db.add_followup(activity_id=activity['id'], marketer_id=st.session_state.user.id, marketer_username=st.session_state.profile.get('full_name'), notes=notes, next_action=next_action, next_followup_date=next_followup_date, interest_level=interest_level, status_update=REVERSE_STATUS_MAPPING[new_status_display])
+                success, msg = db.add_followup(
+                    activity_id=activity['id'],
+                    marketer_id=st.session_state.user.id,
+                    marketer_username=st.session_state.profile.get('full_name'),
+                    notes=notes,
+                    next_action=next_action,
+                    next_followup_date=next_followup_date,
+                    interest_level=interest_level,
+                    status_update=REVERSE_STATUS_Mッピング.get(new_status_display)
+                )
                 if success:
                     st.success(msg)
                     clear_all_cache()
                     st.rerun()
-                else: st.error(msg)
+                else:
+                    st.error(msg)
 
 # Ganti dengan ini di app_supabase.py
 def page_prospect_research():

@@ -218,43 +218,43 @@ def page_dashboard():
     st.divider()
 
     # --- KODE UNTUK SINKRONISASI APOLLO DIKEMBALIKAN DI SINI ---
-    if st.session_state.profile.get('role') in ['superadmin', 'manager']:
-        with st.container(border=True):
-            st.subheader("Sinkron dari Apollo.io")
-            apollo_query = st.text_input("Masukkan query pencarian Apollo.io", placeholder="Contoh: location:indonesia")
-            if st.button("Tarik Data", type="primary"):
-                if not apollo_query:
-                    st.warning("Query pencarian tidak boleh kosong.")
-                else:
-                    # Kode diagnosis jaringan yang sudah kita buat sebelumnya
-                    st.info("Memulai proses sinkronisasi...")
-                    try:
-                        requests.get("https://www.google.com", timeout=10)
-                        st.success("✔️ Koneksi internet dari server: Stabil.")
+    #if st.session_state.profile.get('role') in ['superadmin', 'manager']:
+     #   with st.container(border=True):
+      #      st.subheader("Sinkron dari Apollo.io")
+       #     apollo_query = st.text_input("Masukkan query pencarian Apollo.io", placeholder="Contoh: location:indonesia")
+        #    if st.button("Tarik Data", type="primary"):
+         #       if not apollo_query:
+          #          st.warning("Query pencarian tidak boleh kosong.")
+           #     else:
+            #        # Kode diagnosis jaringan yang sudah kita buat sebelumnya
+             #       st.info("Memulai proses sinkronisasi...")
+              #      try:
+               #         requests.get("https://www.google.com", timeout=10)
+                #        st.success("✔️ Koneksi internet dari server: Stabil.")
+                 #       
+                  #      with st.spinner("Menghubungi Apollo.io dan menarik data..."):
+                   #         raw_prospects = db.sync_prospect_from_apollo(apollo_query)
                         
-                        with st.spinner("Menghubungi Apollo.io dan menarik data..."):
-                            raw_prospects = db.sync_prospect_from_apollo(apollo_query)
-                        
-                        if raw_prospects is not None:
-                            st.success(f"✔️ Respon diterima. Ditemukan {len(raw_prospects)} prospek dari Apollo.")
-                            if raw_prospects:
-                                with st.spinner("Menyimpan prospek ke database..."):
-                                    saved_count = 0
-                                    for p in raw_prospects:
-                                        success, _ = db.add_prospect_research(**p)
-                                        if success: saved_count += 1
-                                    st.success(f"{saved_count} dari {len(raw_prospects)} prospek berhasil disimpan ke 'Riset Prospek'.")
-                                clear_all_cache() # Bersihkan cache agar data baru tampil di halaman lain
-                                st.rerun()
-                            else:
-                                st.info("Tidak ada prospek baru yang cocok dengan query Anda.")
-                        else:
+                    #    if raw_prospects is not None:
+                     #       st.success(f"✔️ Respon diterima. Ditemukan {len(raw_prospects)} prospek dari Apollo.")
+                      #      if raw_prospects:
+                       #         with st.spinner("Menyimpan prospek ke database..."):
+                        #            saved_count = 0
+                         #           for p in raw_prospects:
+                          #              success, _ = db.add_prospect_research(**p)
+                           #             if success: saved_count += 1
+                            #        st.success(f"{saved_count} dari {len(raw_prospects)} prospek berhasil disimpan ke 'Riset Prospek'.")
+                             #   clear_all_cache() # Bersihkan cache agar data baru tampil di halaman lain
+                              #  st.rerun()
+                            #else:
+                             #   st.info("Tidak ada prospek baru yang cocok dengan query Anda.")
+                        #else:
                             # Jika db.sync_prospect_from_apollo mengembalikan None (karena ada error)
-                            st.error("Gagal menarik data. Periksa pesan error di atas bagian ini jika ada.")
-                    except requests.exceptions.Timeout:
-                        st.error("❌ Koneksi internet dari server timeout. Coba lagi dalam beberapa saat.")
-                    except Exception as e:
-                        st.error(f"❌ Terjadi kesalahan jaringan tak terduga: {e}")
+                         #   st.error("Gagal menarik data. Periksa pesan error di atas bagian ini jika ada.")
+                    #except requests.exceptions.Timeout:
+                     #   st.error("❌ Koneksi internet dari server timeout. Coba lagi dalam beberapa saat.")
+                    #except Exception as e:
+                     #   st.error(f"❌ Terjadi kesalahan jaringan tak terduga: {e}")
 
 # --- Halaman Aktivitas Pemasaran ---
 def page_activities_management():
@@ -296,54 +296,64 @@ def page_activities_management():
 def show_activity_form(activity):
     profile = st.session_state.profile
     user = st.session_state.user
-    with st.form(key=f"activity_form_{'edit' if activity else 'add'}"):
-        st.subheader("Detail & Edit Aktivitas" if activity else "Form Aktivitas Baru")
+    with st.form(key=f"activity_form_{'edit' if activity else 'add'}", clear_on_submit=False):
+        st.subheader("Form Tambah/Edit Aktivitas Baru")
+        
+        # --- Field dari Riset Prospek ditambahkan di sini ---
+        st.write("**Informasi Prospek & Perusahaan**")
         col1, col2 = st.columns(2)
         with col1:
-            prospect_name = st.text_input("Nama Prospek*", value=activity.get('prospect_name', '') if activity else "")
-            contact_person = st.text_input("Nama Kontak Person", value=activity.get('contact_person', '') if activity else "")
-            contact_phone = st.text_input("Telepon Kontak", value=activity.get('contact_phone', '') if activity else "")
-            activity_type = st.selectbox("Jenis Aktivitas", options=ACTIVITY_TYPES, index=ACTIVITY_TYPES.index(activity.get('activity_type')) if activity and activity.get('activity_type') in ACTIVITY_TYPES else 0)
+            prospect_name = st.text_input("Nama Perusahaan (Prospek)*", value=activity.get('prospect_name', '') if activity else "")
+            website = st.text_input("Website", value=activity.get('website', '') if activity else "") # Asumsi kolom ada
+            industry = st.text_input("Industri", value=activity.get('industry', '') if activity else "") # Asumsi kolom ada
         with col2:
-            prospect_location = st.text_input("Lokasi Prospek", value=activity.get('prospect_location', '') if activity else "")
-            contact_position = st.text_input("Jabatan Kontak Person", value=activity.get('contact_position', '') if activity else "")
+            contact_person = st.text_input("Nama Kontak Person", value=activity.get('contact_person', '') if activity else "")
+            contact_position = st.text_input("Jabatan Kontak", value=activity.get('contact_position', '') if activity else "")
             contact_email = st.text_input("Email Kontak", value=activity.get('contact_email', '') if activity else "")
+            contact_phone = st.text_input("Telepon Kontak", value=activity.get('contact_phone', '') if activity else "")
+
+        st.divider()
+        st.write("**Detail Aktivitas**")
+        col3, col4 = st.columns(2)
+        with col3:
+             activity_type = st.selectbox("Jenis Aktivitas", options=ACTIVITY_TYPES, index=ACTIVITY_TYPES.index(activity.get('activity_type')) if activity and activity.get('activity_type') in ACTIVITY_TYPES else 0)
+        with col4:
             default_date = str_to_date(activity.get('activity_date')) if activity else date.today()
             activity_date = st.date_input("Tanggal Aktivitas", value=default_date)
+
+        description = st.text_area("Deskripsi Aktivitas", value=activity.get('description', '') if activity else "")
+        status = st.selectbox("Status Aktivitas", options=list(STATUS_MAPPING.values()), index=list(STATUS_MAPPING.values()).index(STATUS_MAPPING.get(activity.get('status', 'baru'))) if activity else 0)
         
-        status_display = st.selectbox("Status", options=list(STATUS_MAPPING.values()), index=list(STATUS_MAPPING.values()).index(STATUS_MAPPING.get(activity.get('status', 'baru'))) if activity else 0)
-        description = st.text_area("Deskripsi", value=activity.get('description', '') if activity else "", height=150)
-        
-        submitted = st.form_submit_button("Simpan")
+        submitted = st.form_submit_button("Simpan Aktivitas")
         if submitted:
             if not prospect_name:
-                st.error("Nama Prospek wajib diisi!")
+                st.error("Nama Perusahaan (Prospek) wajib diisi!")
             else:
-                status_key = REVERSE_STATUS_MAPPING.get(status_display)
-                if activity:
-                    success, msg = db.edit_marketing_activity(
-                        activity_id=activity['id'], 
-                        prospect_name=prospect_name, prospect_location=prospect_location, 
-                        contact_person=contact_person, contact_position=contact_position, 
-                        contact_phone=contact_phone, contact_email=contact_email, 
-                        activity_date=date_to_str(activity_date), activity_type=activity_type, 
-                        description=description, status=status_key
-                    )
-                else:
-                    success, msg, _ = db.add_marketing_activity(
-                        marketer_id=user.id, marketer_username=profile.get('full_name'), 
-                        prospect_name=prospect_name, prospect_location=prospect_location, 
-                        contact_person=contact_person, contact_position=contact_position, 
-                        contact_phone=contact_phone, contact_email=contact_email, 
-                        activity_date=date_to_str(activity_date), activity_type=activity_type, 
-                        description=description, status=status_key
-                    )
-                if success:
-                    st.success(msg)
-                    clear_all_cache()
-                    st.rerun()
-                else:
-                    st.error(msg)
+                with st.spinner("Menyimpan..."):
+                    status_key = REVERSE_STATUS_MAPPING.get(status)
+                    # Data yang dikirim ke database
+                    data_to_send = {
+                        "prospect_name": prospect_name, "prospect_location": activity.get('prospect_location',''), # location bisa ditambahkan ke form
+                        "contact_person": contact_person, "contact_position": contact_position,
+                        "contact_phone": contact_phone, "contact_email": contact_email,
+                        "activity_date": date_to_str(activity_date), "activity_type": activity_type,
+                        "description": description, "status": status_key
+                    }
+
+                    if activity: # Jika ini adalah edit
+                        success, msg = db.edit_marketing_activity(activity['id'], **data_to_send)
+                    else: # Jika ini adalah tambah baru
+                        # Menambahkan info marketing
+                        data_to_send["marketer_id"] = user.id
+                        data_to_send["marketer_username"] = profile.get("full_name")
+                        success, msg, _ = db.add_marketing_activity(**data_to_send)
+
+                    if success:
+                        st.success(msg)
+                        clear_all_cache()
+                        st.rerun()
+                    else:
+                        st.error(f"Gagal menyimpan: {msg}")
 
 
 def show_followup_section(activity):

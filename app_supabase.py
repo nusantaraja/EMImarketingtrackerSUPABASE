@@ -121,7 +121,7 @@ def page_dashboard():
     activities, _, _ = get_data_based_on_role()
 
     if not activities:
-        st.info("Belum ada data aktivitas untuk ditampilkan.")
+        st.info("Belum ada data aktivitas untuk ditampilkan di Dashboard.")
     else:
         df = pd.DataFrame(activities)
 
@@ -144,7 +144,60 @@ def page_dashboard():
                 type_counts = df['activity_type'].value_counts()
                 fig2 = px.bar(type_counts, x=type_counts.index, y=type_counts.values, title="Distribusi Jenis Aktivitas")
                 st.plotly_chart(fig2, use_container_width=True)
-    
+        
+        st.divider()
+        
+        # --- BAGIAN "AKTIVITAS TERBARU" DIKEMBALIKAN ---
+        st.subheader("Aktivitas Terbaru")
+        latest_activities = df.head(5).copy()
+        # Periksa apakah 'created_at' ada sebelum menggunakannya
+        if 'created_at' in latest_activities.columns:
+            latest_activities['Waktu Dibuat'] = latest_activities['created_at'].apply(lambda x: convert_to_wib_and_format(x, format_str='%d %b %Y, %H:%M'))
+            display_cols = ['Waktu Dibuat', 'prospect_name', 'marketer_username', 'status']
+            if all(col in latest_activities.columns for col in display_cols):
+                latest_activities_display = latest_activities[display_cols].rename(columns={'prospect_name': 'Prospek', 'marketer_username': 'Marketing', 'status': 'Status'})
+                latest_activities_display['Status'] = latest_activities_display['Status'].map(STATUS_MAPPING)
+                st.dataframe(latest_activities_display, use_container_width=True, hide_index=True)
+        else:
+            st.warning("Data 'created_at' untuk aktivitas terbaru tidak tersedia.")
+        
+        st.divider()
+
+        # --- BAGIAN "JADWAL FOLLOW-UP" DIKEMBALIKAN ---
+        st.subheader("Jadwal Follow-up (7 Hari Mendatang)")
+        # Mengambil semua follow-up terkait aktivitas yang sudah di-load
+        all_followups = [fu for act in activities if act.get('id') for fu in db.get_followups_by_activity_id(act['id'])]
+        
+        if not all_followups:
+            st.info("Tidak ada jadwal follow-up yang ditemukan.")
+        else:
+            # Menambahkan nama prospek ke setiap follow-up
+            for fu in all_followups:
+                fu['prospect_name'] = next((act.get('prospect_name', 'N/A') for act in activities if act.get('id') == fu.get('activity_id')), 'N/A')
+            
+            followups_df = pd.DataFrame(all_followups)
+            # Pastikan kolom tanggal ada sebelum diproses
+            if 'next_followup_date' in followups_df.columns:
+                followups_df['next_followup_date'] = pd.to_datetime(followups_df['next_followup_date'], utc=True, errors='coerce')
+                followups_df.dropna(subset=['next_followup_date'], inplace=True)
+                
+                if not followups_df.empty:
+                    wib_tz = ZoneInfo("Asia/Jakarta")
+                    today = pd.Timestamp.now(tz=wib_tz).normalize()
+                    next_7_days = today + pd.Timedelta(days=7)
+                    upcoming_df = followups_df[(followups_df['next_followup_date'] >= today) & (followups_df['next_followup_date'] <= next_7_days)].sort_values(by='next_followup_date')
+                    
+                    if not upcoming_df.empty:
+                        upcoming_df['Tanggal'] = upcoming_df['next_followup_date'].dt.tz_convert(wib_tz).dt.strftime('%A, %d %b %Y')
+                        display_cols_fu = ['Tanggal', 'prospect_name', 'marketer_username', 'next_action']
+                        st.dataframe(upcoming_df[display_cols_fu].rename(columns={'prospect_name': 'Prospek', 'marketer_username': 'Marketing', 'next_action': 'Tindakan'}), use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Tidak ada jadwal follow-up dalam 7 hari ke depan.")
+                else:
+                    st.info("Tidak ada data follow-up dengan tanggal yang valid.")
+            else:
+                st.warning("Data 'next_followup_date' tidak tersedia.")
+
     st.divider()
 
     # --- KODE UNTUK SINKRONISASI APOLLO DIKEMBALIKAN DI SINI ---

@@ -202,16 +202,10 @@ def page_dashboard():
 
     # --- KODE UNTUK SINKRONISASI APOLLO DIKEMBALIKAN DI SINI ---
     if st.session_state.profile.get('role') in ['superadmin', 'manager']:
-        with st.container(border=True): # Menggunakan kontainer agar terlihat lebih rapi
+        with st.container(border=True):
             st.subheader("Sinkron dari Apollo.io")
-            st.info("Tarik data prospek baru langsung dari Apollo.io ke dalam daftar 'Riset Prospek'.")
-            
-            apollo_query = st.text_input(
-                "Masukkan query pencarian Apollo.io",
-                placeholder="Contoh: location:indonesia AND job_titles:founder"
-            )
-            
-            if st.button("Tarik Data dari Apollo.io", type="primary"):
+            apollo_query = st.text_input("Masukkan query pencarian Apollo.io", placeholder="Contoh: location:indonesia")
+            if st.button("Tarik Data", type="primary"):
                 if not apollo_query:
                     st.warning("Query pencarian tidak boleh kosong.")
                 else:
@@ -244,6 +238,7 @@ def page_dashboard():
                         st.error("❌ Koneksi internet dari server timeout. Coba lagi dalam beberapa saat.")
                     except Exception as e:
                         st.error(f"❌ Terjadi kesalahan jaringan tak terduga: {e}")
+
 # --- Halaman Aktivitas Pemasaran ---
 def page_activities_management():
     st.title("Manajemen Aktivitas Pemasaran")

@@ -272,18 +272,205 @@ def show_followup_section(activity):
                     st.rerun()
                 else: st.error(msg)
 
+# Ganti dengan ini di app_supabase.py
 def page_prospect_research():
     st.title("Riset Prospek 🔍💼")
     _, prospects, _ = get_data_based_on_role()
-    # ... Logika lengkap halaman Riset Prospek bisa disalin dari file asli Anda ...
+    profile = st.session_state.profile
 
+    if 'preview_content' not in st.session_state: st.session_state.preview_content = ""
+    if 'last_selected_id' not in st.session_state: st.session_state.last_selected_id = 0
+
+    st.subheader("Cari Prospek")
+    search_query = st.text_input("Ketik nama perusahaan, kontak, industri, atau lokasi...")
+    filtered_prospects = db.search_prospect_research(search_query) if search_query else prospects
+
+    st.divider()
+    st.subheader("Daftar Prospek")
+    if not filtered_prospects:
+        st.info("Belum ada data prospek yang ditemukan.")
+    else:
+        df_prospect = pd.DataFrame(filtered_prospects)
+        display_cols = ['company_name', 'contact_name', 'industry', 'status']
+        df_display = df_prospect[[col for col in display_cols if col in df_prospect.columns]]
+        st.dataframe(df_display.rename(columns={'company_name': 'Perusahaan', 'contact_name': 'Kontak', 'industry': 'Industri', 'status': 'Status'}), use_container_width=True, hide_index=True)
+
+    st.divider()
+    options = {p['id']: f"{p.get('company_name', 'N/A')} - {p.get('contact_name', 'N/A')}" for p in filtered_prospects}
+    options[0] = "<< Tambah Prospek Baru >>"
+    selected_id = st.selectbox("Pilih prospek untuk detail/edit:", options.keys(), format_func=lambda x: options.get(x, "N/A"), index=0, key="prospect_select")
+
+    # Logika untuk reset preview
+    if st.session_state.last_selected_id != selected_id:
+        st.session_state.preview_content = ""
+        st.session_state.last_selected_id = selected_id
+
+    if selected_id == 0:
+        st.subheader("Form Tambah Prospek Baru")
+        with st.form("add_prospect_form"):
+            # ... (Logika form ini sangat panjang, merekonstruksi bagian utama)
+            company_name = st.text_input("Nama Perusahaan*")
+            contact_name = st.text_input("Nama Kontak")
+            status = st.selectbox("Status Prospek", ["baru", "dalam_proses", "berhasil", "gagal"])
+            submitted = st.form_submit_button("Simpan Prospek")
+            if submitted:
+                if not company_name:
+                    st.error("Nama Perusahaan wajib diisi!")
+                else:
+                    success, msg = db.add_prospect_research(company_name=company_name, contact_name=contact_name, status=status, marketer_id=st.session_state.user.id, marketer_username=profile.get("full_name"))
+                    if success:
+                        st.success(msg)
+                        clear_all_cache()
+                        # st.rerun() tidak diperlukan jika form ada di halaman yang sama
+                    else:
+                        st.error(msg)
+    else:
+        prospect = db.get_prospect_by_id(selected_id)
+        if prospect:
+            st.subheader(f"Edit Prospek: {prospect.get('company_name')}")
+            # ... (Logika form edit prospek yang mirip dengan form tambah)
+            
+            # --- Bagian Template Email ---
+            st.divider()
+            st.subheader("Template Email Profesional")
+            html_template = generate_html_email_template(prospect, user_profile=profile)
+            edited_html = st.text_area("Edit Template Email", value=html_template, height=300, key=f"editor_{selected_id}")
+            if st.button("Kirim via Zoho", key=f"send_zoho_{selected_id}"):
+                # Logika Kirim Zoho
+                pass
+
+# Ganti dengan ini di app_supabase.py
 def page_user_management():
     st.title("Manajemen Pengguna")
-    # ... Logika lengkap halaman Manajemen Pengguna bisa disalin dari file asli Anda ...
+    profile = st.session_state.profile
+    user = st.session_state.user
 
+    # Verifikasi hak akses
+    if profile.get('role') not in ['superadmin', 'manager']:
+        st.error("Anda tidak memiliki akses ke halaman ini.")
+        return
+
+    if profile.get('role') == 'superadmin':
+        profiles_data = db.get_all_profiles()
+    else:  # Asumsi role manager
+        profiles_data = db.get_team_profiles(user.id)
+
+    tab1, tab2 = st.tabs(["Daftar Pengguna", "Tambah Pengguna Baru"])
+
+    with tab1:
+        st.subheader("Daftar Pengguna Saat Ini")
+        if profiles_data:
+            df = pd.DataFrame(profiles_data)
+            # Menangani kolom manager yang mungkin tidak ada atau None
+            if 'manager' in df.columns:
+                df['Nama Manajer'] = df['manager'].apply(lambda x: x['full_name'] if isinstance(x, dict) and x else 'N/A')
+            else:
+                df['Nama Manajer'] = 'N/A'
+            
+            display_cols = ['id', 'full_name', 'email', 'role', 'Nama Manajer']
+            df_display = df[[col for col in display_cols if col in df.columns]]
+            st.dataframe(df_display.rename(columns={'id': 'User ID', 'full_name': 'Nama Lengkap', 'role': 'Role', 'email': 'Email'}), use_container_width=True)
+        else:
+            st.info("Tidak ada pengguna untuk ditampilkan.")
+
+    with tab2:
+        st.subheader("Form Tambah Pengguna Baru")
+        with st.form("add_user_form", clear_on_submit=True):
+            full_name = st.text_input("Nama Lengkap*")
+            email = st.text_input("Email*")
+            password = st.text_input("Password*", type="password")
+            
+            role_options = ["manager", "marketing"] if profile.get('role') == 'superadmin' else ["marketing"]
+            role = st.selectbox("Role*", role_options)
+            
+            manager_id = None
+            if role == 'marketing':
+                if profile.get('role') == 'superadmin':
+                    managers = db.get_all_managers()
+                    if not managers:
+                        st.warning("Belum ada Manajer terdaftar. Harap buat pengguna dengan role 'manager' terlebih dahulu.")
+                    else:
+                        manager_options = {mgr['id']: mgr['full_name'] for mgr in managers}
+                        manager_id = st.selectbox("Pilih Manajer*", options=manager_options.keys(), format_func=lambda x: manager_options.get(x, 'N/A'))
+                else: # Jika yang menambah adalah manager
+                    manager_id = user.id
+                    st.info(f"Anda ({profile.get('full_name')}) akan otomatis menjadi manajer untuk pengguna baru ini.")
+            
+            submitted = st.form_submit_button("Daftarkan Pengguna Baru")
+            if submitted:
+                if not all([full_name, email, password]):
+                    st.error("Field dengan tanda bintang (*) wajib diisi!")
+                else:
+                    new_user, error = db.create_user_as_admin(email, password, full_name, role, manager_id)
+                    if new_user:
+                        st.success(f"Pengguna {full_name} berhasil didaftarkan.")
+                        clear_all_cache() # Hapus cache agar daftar pengguna diperbarui
+                        st.rerun() # Tidak perlu, karena form sudah clear_on_submit
+                    else:
+                        st.error(f"Gagal mendaftarkan: {error}")
+
+# Ganti dengan ini di app_supabase.py
 def page_settings():
     st.title("Pengaturan Aplikasi")
-    # ... Logika lengkap halaman Pengaturan bisa disalin dari file asli Anda ...
+    
+    # Bagian Konfigurasi Aplikasi
+    config = db.get_app_config()
+    with st.form("config_form"):
+        st.subheader("Konfigurasi Umum")
+        app_name = st.text_input("Nama Aplikasi", value=config.get('app_name', 'EMI Marketing Tracker'))
+        if st.form_submit_button("Simpan Pengaturan"):
+            if not app_name:
+                st.error("Nama aplikasi wajib diisi!")
+            else:
+                success, msg = db.update_app_config({'app_name': app_name})
+                if success:
+                    st.success(msg)
+                    st.rerun()
+                else:
+                    st.error(msg)
+    
+    st.divider()
+    
+    # Bagian Integrasi Zoho Mail
+    st.subheader("Pengaturan Integrasi Zoho Mail")
+    if "zoho" in st.secrets and st.secrets.get("zoho", {}).get("access_token"):
+        st.success("Integrasi Zoho Mail Aktif.")
+    else:
+        st.warning("Integrasi Zoho Mail belum aktif. Silakan generate token awal.")
+    st.write("Jika Anda perlu generate token untuk pertama kali atau jika refresh otomatis gagal, gunakan form di bawah ini.")
+    
+    with st.form("zoho_auth_form"):
+        st.write("#### Langkah 1: Ambil Code dari Zoho")
+        auth_url = get_authorization_url()
+        st.markdown(f"[Klik di sini untuk mengizinkan akses Zoho Mail]({auth_url})")
+        st.info("Setelah klik 'Accept', salin 'code' dari URL di browser Anda dan tempel di bawah.")
+        code = st.text_input("Masukkan code dari Zoho:")
+        if st.form_submit_button("Generate Access Token"):
+            if not code:
+                st.warning("Silakan masukkan code dari Zoho.")
+            else:
+                with st.spinner("Sedang menukar kode dengan token..."):
+                    success, msg = db.exchange_code_for_tokens(code)
+                    if success:
+                        st.success(msg)
+                        st.rerun()
+                    else:
+                        st.error(msg)
+
+# Jangan lupa untuk juga merekonstruksi `get_authorization_url()` jika hilang
+def get_authorization_url():
+    if "zoho" in st.secrets:
+        zoho_secrets = st.secrets.get("zoho", {})
+        params = {
+            "response_type": "code", 
+            "client_id": zoho_secrets.get("client_id"), 
+            "scope": "ZohoMail.send,ZohoMail.read", 
+            "redirect_uri": zoho_secrets.get("redirect_uri", "https://emimtsupabase.streamlit.app/")
+        }
+        base_url = "https://accounts.zoho.com/oauth/v2/auth?"
+        # Pastikan tidak ada parameter None yang dikirim
+        return base_url + urlencode({k: v for k, v in params.items() if v})
+    return "#"
 
 def get_authorization_url():
     if "zoho" in st.secrets:

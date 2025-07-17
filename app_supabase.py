@@ -100,24 +100,31 @@ def show_sidebar():
     with st.sidebar:
         profile = st.session_state.get('profile')
         if not profile:
-            st.warning("Sesi tidak valid.")
-            if st.button("Kembali ke Login"):
-                st.session_state.clear()
-                st.rerun()
-            return None
+            st.error("Sesi tidak valid, harap login ulang.")
+            st.stop() # Hentikan eksekusi jika profil tidak ada
+            
         st.title("Menu Navigasi")
         st.write(f"Selamat datang, **{profile.get('full_name', 'User')}**!")
         st.write(f"Role: **{profile.get('role', 'N/A').capitalize()}**")
         st.divider()
+
+        # === LOGIKA MENU YANG BENAR DI SINI ===
         pages = ["Dashboard", "Aktivitas Pemasaran"]
-        if profile.get('role') in ['superadmin', 'manager']: pages.append("Manajemen Pengguna")
-        if profile.get('role') == 'superadmin': pages.append("Pengaturan")
+        
+        # Tambahkan menu berdasarkan role
+        if profile.get('role') in ['superadmin', 'manager']:
+            pages.append("Manajemen Pengguna")
+        if profile.get('role') == 'superadmin':
+            pages.append("Pengaturan") # <-- INI MENGEMBALIKAN MENU PENGATURAN
+
         page = st.radio("Pilih Halaman:", pages, key="page_selection")
         st.divider()
+        
         if st.button("Logout"):
             clear_all_cache()
             st.session_state.clear()
             st.rerun()
+            
         return page
 
 @st.cache_data(ttl=600)

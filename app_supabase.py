@@ -354,7 +354,7 @@ def show_followup_section(activity):
         new_status_display = st.selectbox("Update Status", options=list(STATUS_MAPPING.values()), index=list(STATUS_MAPPING.values()).index(STATUS_MAPPING.get(activity.get('status', 'baru'), 'Baru')))
         
         if st.form_submit_button("Simpan Follow-up"):
-        if not notes: st.warning("Catatan tidak boleh kosong.")
+            if not notes: st.warning("Catatan tidak boleh kosong.")
         else:
             success, msg = db.add_followup(...)
             if success:

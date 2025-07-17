@@ -275,14 +275,16 @@ def show_followup_section(activity):
 # Ganti dengan ini di app_supabase.py
 def page_prospect_research():
     st.title("Riset Prospek 🔍💼")
+    # Mengambil data berdasarkan role pengguna
     _, prospects, _ = get_data_based_on_role()
     profile = st.session_state.profile
 
+    # Inisialisasi session state untuk preview template email
     if 'preview_content' not in st.session_state: st.session_state.preview_content = ""
     if 'last_selected_id' not in st.session_state: st.session_state.last_selected_id = 0
 
     st.subheader("Cari Prospek")
-    search_query = st.text_input("Ketik nama perusahaan, kontak, industri, atau lokasi...")
+    search_query = st.text_input("Ketik nama perusahaan, kontak, industri, atau lokasi untuk mencari...")
     filtered_prospects = db.search_prospect_research(search_query) if search_query else prospects
 
     st.divider()
@@ -292,52 +294,128 @@ def page_prospect_research():
     else:
         df_prospect = pd.DataFrame(filtered_prospects)
         display_cols = ['company_name', 'contact_name', 'industry', 'status']
-        df_display = df_prospect[[col for col in display_cols if col in df_prospect.columns]]
-        st.dataframe(df_display.rename(columns={'company_name': 'Perusahaan', 'contact_name': 'Kontak', 'industry': 'Industri', 'status': 'Status'}), use_container_width=True, hide_index=True)
+        # Memastikan kolom yang ditampilkan ada di dataframe untuk mencegah error
+        display_cols_exist = [col for col in display_cols if col in df_prospect.columns]
+        st.dataframe(df_prospect[display_cols_exist].rename(columns={'company_name': 'Perusahaan', 'contact_name': 'Kontak', 'industry': 'Industri', 'status': 'Status'}), use_container_width=True, hide_index=True)
 
     st.divider()
+    st.subheader("Pilih Prospek untuk Detail/Edit atau Tambah Baru")
     options = {p['id']: f"{p.get('company_name', 'N/A')} - {p.get('contact_name', 'N/A')}" for p in filtered_prospects}
     options[0] = "<< Tambah Prospek Baru >>"
-    selected_id = st.selectbox("Pilih prospek untuk detail/edit:", options.keys(), format_func=lambda x: options.get(x, "N/A"), index=0, key="prospect_select")
+    selected_id = st.selectbox("Pilih Prospek:", options.keys(), format_func=lambda x: options.get(x, 'N/A'), index=0, key="prospect_select")
 
-    # Logika untuk reset preview
+    # Logika untuk mereset preview template email jika pilihan berubah
     if st.session_state.last_selected_id != selected_id:
         st.session_state.preview_content = ""
         st.session_state.last_selected_id = selected_id
 
+    # === FORM TAMBAH PROSPEK BARU (LENGKAP) ===
     if selected_id == 0:
         st.subheader("Form Tambah Prospek Baru")
-        with st.form("add_prospect_form"):
-            # ... (Logika form ini sangat panjang, merekonstruksi bagian utama)
-            company_name = st.text_input("Nama Perusahaan*")
-            contact_name = st.text_input("Nama Kontak")
-            status = st.selectbox("Status Prospek", ["baru", "dalam_proses", "berhasil", "gagal"])
-            submitted = st.form_submit_button("Simpan Prospek")
+        with st.form("add_prospect_form", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                company_name = st.text_input("Nama Perusahaan*")
+                website = st.text_input("Website")
+                industry = st.text_input("Industri")
+                founded_year = st.number_input("Tahun Berdiri", min_value=1900, max_value=datetime.now().year + 1, step=1, value=2000)
+                company_size = st.text_input("Jumlah Karyawan (Contoh: 51-200)")
+                revenue = st.text_input("Pendapatan Tahunan (Contoh: $10M)")
+            with col2:
+                contact_name = st.text_input("Nama Kontak")
+                contact_title = st.text_input("Jabatan")
+                contact_email = st.text_input("Email Kontak")
+                linkedin_url = st.text_input("URL LinkedIn Kontak")
+                phone = st.text_input("Nomor Telepon Kontak")
+                location = st.text_input("Lokasi Kantor (Kota/Negara)")
+            
+            st.subheader("Detail Tambahan")
+            notes = st.text_area("Catatan Mengenai Prospek")
+            next_step = st.text_input("Rencana Langkah Selanjutnya")
+            next_step_date = st.date_input("Tanggal Follow-up Selanjutnya", value=None)
+            status = st.selectbox("Status Prospek", ["baru", "dalam_proses", "berhasil", "gagal"], index=0)
+            source = st.text_input("Sumber Prospek", value="manual")
+
+            submitted = st.form_submit_button("Simpan Prospek Baru")
             if submitted:
                 if not company_name:
                     st.error("Nama Perusahaan wajib diisi!")
                 else:
-                    success, msg = db.add_prospect_research(company_name=company_name, contact_name=contact_name, status=status, marketer_id=st.session_state.user.id, marketer_username=profile.get("full_name"))
+                    success, msg = db.add_prospect_research(
+                        company_name=company_name, website=website, industry=industry, 
+                        founded_year=founded_year, company_size=company_size, revenue=revenue, 
+                        location=location, contact_name=contact_name, contact_title=contact_title, 
+                        contact_email=contact_email, linkedin_url=linkedin_url, phone=phone, 
+                        notes=notes, next_step=next_step, next_step_date=date_to_str(next_step_date), 
+                        status=status, source=source, 
+                        marketer_id=st.session_state.user.id, marketer_username=profile.get("full_name")
+                    )
                     if success:
                         st.success(msg)
-                        clear_all_cache()
-                        # st.rerun() tidak diperlukan jika form ada di halaman yang sama
+                        clear_all_cache() # Hapus cache agar daftar prospek diperbarui
                     else:
                         st.error(msg)
+    
+    # === FORM EDIT PROSPEK (LENGKAP) ===
     else:
         prospect = db.get_prospect_by_id(selected_id)
         if prospect:
             st.subheader(f"Edit Prospek: {prospect.get('company_name')}")
-            # ... (Logika form edit prospek yang mirip dengan form tambah)
+            with st.form(f"edit_prospect_form_{selected_id}"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    company_name = st.text_input("Nama Perusahaan*", value=prospect.get('company_name', ''))
+                    website = st.text_input("Website", value=prospect.get('website', ''))
+                    industry = st.text_input("Industri", value=prospect.get('industry', ''))
+                    founded_year = st.number_input("Tahun Berdiri", min_value=1900, max_value=datetime.now().year + 1, step=1, value=prospect.get('founded_year') or 2000)
+                    company_size = st.text_input("Jumlah Karyawan", value=prospect.get('company_size', ''))
+                    revenue = st.text_input("Pendapatan Tahunan", value=prospect.get('revenue', ''))
+                with col2:
+                    contact_name = st.text_input("Nama Kontak", value=prospect.get('contact_name', ''))
+                    contact_title = st.text_input("Jabatan", value=prospect.get('contact_title', ''))
+                    contact_email = st.text_input("Email Kontak", value=prospect.get('contact_email', ''))
+                    linkedin_url = st.text_input("URL LinkedIn Kontak", value=prospect.get('linkedin_url', ''))
+                    phone = st.text_input("Nomor Telepon Kontak", value=prospect.get('phone', ''))
+                    location = st.text_input("Lokasi Kantor", value=prospect.get('location', ''))
+
+                notes = st.text_area("Catatan Mengenai Prospek", value=prospect.get('notes', ''))
+                next_step = st.text_input("Rencana Langkah Selanjutnya", value=prospect.get('next_step', ''))
+                next_step_date = st.date_input("Tanggal Follow-up Selanjutnya", value=str_to_date(prospect.get('next_step_date')))
+                
+                status_options = ["baru", "dalam_proses", "berhasil", "gagal"]
+                status = st.selectbox("Status Prospek", status_options, index=status_options.index(prospect.get('status', 'baru')) if prospect.get('status') in status_options else 0)
+                source = st.text_input("Sumber Prospek", value=prospect.get('source', 'manual'))
+                
+                submitted = st.form_submit_button("Simpan Perubahan")
+                if submitted:
+                    success, msg = db.edit_prospect_research(
+                        prospect_id=selected_id,
+                        company_name=company_name, website=website, industry=industry,
+                        founded_year=founded_year, company_size=company_size, revenue=revenue,
+                        location=location, contact_name=contact_name, contact_title=contact_title,
+                        contact_email=contact_email, linkedin_url=linkedin_url, phone=phone,
+                        notes=notes, next_step=next_step, next_step_date=date_to_str(next_step_date),
+                        status=status, source=source
+                    )
+                    if success:
+                        st.success(msg)
+                        clear_all_cache() # Hapus cache untuk update
+                        st.rerun()
+                    else:
+                        st.error(msg)
             
             # --- Bagian Template Email ---
             st.divider()
-            st.subheader("Template Email Profesional")
+            st.subheader("Template Email Profesional (Terkait Prospek ini)")
             html_template = generate_html_email_template(prospect, user_profile=profile)
             edited_html = st.text_area("Edit Template Email", value=html_template, height=300, key=f"editor_{selected_id}")
+            
             if st.button("Kirim via Zoho", key=f"send_zoho_{selected_id}"):
-                # Logika Kirim Zoho
-                pass
+                with st.spinner("Mengirim email via Zoho..."):
+                    # Anda mungkin perlu menyesuaikan "from_email"
+                    success, msg = db.send_email_via_zoho({"to": prospect.get("contact_email"), "subject": f"Penawaran AI untuk {prospect.get('company_name')}", "content": edited_html, "from": st.secrets.get("zoho", {}).get("from_email", "default_email@anda.com")})
+                    if success: st.success(msg)
+                    else: st.error(msg)
 
 # Ganti dengan ini di app_supabase.py
 def page_user_management():

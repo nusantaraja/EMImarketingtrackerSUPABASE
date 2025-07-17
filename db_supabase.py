@@ -122,59 +122,45 @@ def get_activity_by_id(activity_id):
         st.error(f"Error saat mengambil detail aktivitas: {e}")
         return None
 
-def add_marketing_activity(
-    marketer_id, marketer_username, prospect_name, prospect_location, 
-    contact_person, contact_position, contact_phone, contact_email, 
-    activity_date, activity_type, description, status
-):
+def add_marketing_activity(**kwargs):
     """
-    Menambahkan satu catatan aktivitas pemasaran ke database.
-    Menerima semua argumen secara eksplisit.
+    Menambahkan satu catatan aktivitas pemasaran ke database menggunakan keyword arguments.
+    Sangat fleksibel dan cocok untuk form yang dinamis.
     """
     supabase = init_connection()
 
-    # Validasi data penting sebelum mengirim
-    if not all([marketer_id, marketer_username, prospect_name]):
-        error_msg = "Data krusial (ID Marketing, Username, Nama Prospek) tidak boleh kosong."
-        return False, error_msg, None
-
+    # Validasi data paling krusial yang HARUS ada
+    if not kwargs.get("marketer_id") or not kwargs.get("prospect_name"):
+        return False, "ID Marketing dan Nama Prospek wajib ada.", None
+    
     try:
-        # Siapkan data dictionary dari semua argumen
-        data = {
-            "marketer_id": marketer_id,
-            "marketer_username": marketer_username,
-            "prospect_name": prospect_name,
-            "prospect_location": prospect_location,
-            "contact_person": contact_person,
-            "contact_position": contact_position,
-            "contact_phone": contact_phone,
-            "contact_email": contact_email,
-            "activity_date": activity_date,
-            "activity_type": activity_type,
-            "description": description,
-            "status": status
-        }
+        # Langsung insert semua keyword arguments yang diberikan
+        response = supabase.from_("marketing_activities").insert(kwargs).execute()
         
-        # Eksekusi perintah insert
-        response = supabase.from_("marketing_activities").insert(data).execute()
-        
-        # Cek apakah data berhasil ditambahkan dan kembalikan ID baru
+        # Cek apakah data berhasil ditambahkan
         if response.data and len(response.data) > 0:
             return True, "Aktivitas berhasil ditambahkan!", response.data[0].get("id")
         else:
-            # Error ini biasanya terjadi karena RLS yang memblokir INSERT
-            return False, "Gagal menambahkan aktivitas ke database. Periksa kebijakan RLS (INSERT).", None
+            error_details = f"Detail: {response.error.message if hasattr(response, 'error') and response.error else 'Unknown'}"
+            return False, f"Gagal menambahkan aktivitas. Mungkin diblokir RLS. {error_details}", None
 
     except Exception as e:
-        return False, f"Gagal menambahkan aktivitas: {e}", None
+        return False, f"Terjadi error saat menambahkan aktivitas: {e}", None
 
 def edit_marketing_activity(activity_id, **kwargs):
-    if not activity_id: return False, "ID Aktivitas tidak valid."
+    """
+    Mengedit aktivitas pemasaran yang ada menggunakan keyword arguments.
+    """
+    if not activity_id:
+        return False, "ID Aktivitas tidak valid."
+
     supabase = init_connection()
     try:
+        # kwargs berisi semua field yang akan di-update
         supabase.from_("marketing_activities").update(kwargs).eq("id", activity_id).execute()
         return True, "Aktivitas berhasil diperbarui."
-    except Exception as e: return False, f"Gagal memperbarui aktivitas: {e}"
+    except Exception as e:
+        return False, f"Gagal memperbarui aktivitas: {e}"
 
 # --- Follow-up ---
 def get_followups_by_activity_id(activity_id):

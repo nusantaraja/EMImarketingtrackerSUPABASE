@@ -63,18 +63,80 @@ def get_data_based_on_role():
 # --- FUNGSI UNTUK SETIAP HALAMAN ---
 def page_dashboard():
     st.title(f"Dashboard {st.session_state.profile.get('role', '').capitalize()}")
-    activities, _ = get_data_based_on_role()
-    if not activities: st.info("Belum ada data aktivitas untuk ditampilkan.")
+    activities, _, _ = get_data_based_on_role()
+
+    if not activities:
+        st.info("Belum ada data aktivitas untuk ditampilkan di Dashboard.")
     else:
         df = pd.DataFrame(activities)
-        col1, col2, col3 = st.columns(3); col1.metric("Total Aktivitas", len(df))
-        col2.metric("Total Prospek Unik", df['prospect_name'].nunique())
-        if st.session_state.profile.get('role') in ['superadmin', 'manager']: col3.metric("Jumlah Anggota Tim", df['marketer_id'].nunique())
+
+        # Bagian Metrik
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total Aktivitas", len(df))
+        col2.metric("Total Prospek Unik", df['prospect_name'].nunique() if 'prospect_name' in df.columns else 0)
+        if st.session_state.profile.get('role') in ['superadmin', 'manager']:
+            col3.metric("Jumlah Anggota Tim", df['marketer_id'].nunique() if 'marketer_id' in df.columns else 0)
+
+        # === GRAFIK DIKEMBALIKAN ===
         st.subheader("Analisis Aktivitas Pemasaran")
-        col1_chart, col2_chart = st.columns(2)
-        with col1_chart: st.plotly_chart(px.pie(df['status'].map(STATUS_MAPPING).value_counts(), title="Distribusi Status"), use_container_width=True)
-        with col2_chart: st.plotly_chart(px.bar(df['activity_type'].value_counts(), title="Distribusi Jenis Aktivitas"), use_container_width=True)
-        # Tambahan lainnya bisa ditaruh di sini
+        col_chart1, col_chart2 = st.columns(2)
+        with col_chart1:
+            if 'status' in df.columns and not df['status'].empty:
+                status_counts = df['status'].map(STATUS_MAPPING).value_counts()
+                fig_pie = px.pie(status_counts, values=status_counts.values, names=status_counts.index, title="Distribusi Status Prospek")
+                st.plotly_chart(fig_pie, use_container_width=True)
+        with col_chart2:
+            if 'activity_type' in df.columns and not df['activity_type'].empty:
+                type_counts = df['activity_type'].value_counts()
+                fig_bar = px.bar(type_counts, x=type_counts.index, y=type_counts.values, title="Distribusi Jenis Aktivitas")
+                st.plotly_chart(fig_bar, use_container_width=True)
+
+        st.divider()
+
+        # === DAFTAR AKTIVITAS TERBARU DIKEMBALIKAN ===
+        st.subheader("Aktivitas Terbaru")
+        latest_activities = df.head(5).copy()
+        if 'created_at' in latest_activities.columns:
+            latest_activities['Waktu Dibuat'] = latest_activities['created_at'].apply(lambda x: convert_to_wib_and_format(x, format_str='%d %b %Y, %H:%M'))
+            display_cols = ['Waktu Dibuat', 'prospect_name', 'marketer_username', 'status']
+            if all(col in latest_activities.columns for col in display_cols):
+                latest_display = latest_activities[display_cols].rename(columns={'prospect_name': 'Prospek', 'marketer_username': 'Marketing', 'status': 'Status'})
+                latest_display['Status'] = latest_display['Status'].map(STATUS_MAPPING)
+                st.dataframe(latest_display, use_container_width=True, hide_index=True)
+
+        st.divider()
+
+        # === JADWAL FOLLOW-UP DIKEMBALIKAN ===
+        st.subheader("Jadwal Follow-up (7 Hari Mendatang)")
+        all_followups = [fu for act in activities if act.get('id') for fu in db.get_followups_by_activity_id(act['id'])]
+        if not all_followups:
+            st.info("Tidak ada jadwal follow-up yang ditemukan.")
+        else:
+            for fu in all_followups:
+                fu['prospect_name'] = next((act.get('prospect_name', 'N/A') for act in activities if act.get('id') == fu.get('activity_id')), 'N/A')
+            
+            followups_df = pd.DataFrame(all_followups)
+            if 'next_followup_date' in followups_df.columns:
+                followups_df['next_followup_date'] = pd.to_datetime(followups_df['next_followup_date'], utc=True, errors='coerce')
+                followups_df.dropna(subset=['next_followup_date'], inplace=True)
+                
+                if not followups_df.empty:
+                    wib_tz = ZoneInfo("Asia/Jakarta")
+                    today = pd.Timestamp.now(tz=wib_tz).normalize()
+                    next_7_days = today + pd.Timedelta(days=7)
+                    upcoming_df = followups_df[(followups_df['next_followup_date'] >= today) & (followups_df['next_followup_date'] <= next_7_days)].sort_values(by='next_followup_date')
+                    
+                    if not upcoming_df.empty:
+                        upcoming_df['Tanggal'] = upcoming_df['next_followup_date'].dt.tz_convert(wib_tz).dt.strftime('%A, %d %b %Y')
+                        display_cols_fu = ['Tanggal', 'prospect_name', 'marketer_username', 'next_action']
+                        st.dataframe(upcoming_df[display_cols_fu].rename(columns={'prospect_name': 'Prospek', 'marketer_username': 'Marketing', 'next_action': 'Tindakan'}), use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Tidak ada jadwal follow-up dalam 7 hari ke depan.")
+            else:
+                st.warning("Data follow-up tidak memiliki kolom 'next_followup_date'.")
+
+    # Fitur Apollo tetap di-skip untuk sementara
+    st.divider()
 
 def page_activities_management():
     st.title("Manajemen Aktivitas Pemasaran"); activities, _ = get_data_based_on_role()

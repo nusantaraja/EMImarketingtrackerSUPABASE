@@ -121,9 +121,11 @@ def page_dashboard():
     activities, _, _ = get_data_based_on_role()
 
     if not activities:
-        st.info("Belum ada data aktivitas untuk ditampilkan di Dashboard.")
+        st.info("Belum ada data aktivitas untuk ditampilkan.")
     else:
         df = pd.DataFrame(activities)
+
+        # Bagian Metrik
         col1, col2, col3 = st.columns(3)
         col1.metric("Total Aktivitas", len(df))
         col2.metric("Total Prospek Unik", df['prospect_name'].nunique() if 'prospect_name' in df.columns else 0)
@@ -131,85 +133,64 @@ def page_dashboard():
             col3.metric("Jumlah Anggota Tim", df['marketer_id'].nunique() if 'marketer_id' in df.columns else 0)
 
         st.subheader("Analisis Aktivitas Pemasaran")
-        col1_chart, col2_chart = st.columns(2)
-        with col1_chart:
+        col_chart1, col_chart2 = st.columns(2)
+        with col_chart1:
             if 'status' in df.columns and not df['status'].empty:
                 status_counts = df['status'].map(STATUS_MAPPING).value_counts()
                 fig = px.pie(status_counts, values=status_counts.values, names=status_counts.index, title="Distribusi Status Prospek")
                 st.plotly_chart(fig, use_container_width=True)
-        with col2_chart:
+        with col_chart2:
             if 'activity_type' in df.columns and not df['activity_type'].empty:
                 type_counts = df['activity_type'].value_counts()
                 fig2 = px.bar(type_counts, x=type_counts.index, y=type_counts.values, title="Distribusi Jenis Aktivitas")
                 st.plotly_chart(fig2, use_container_width=True)
-        
-        st.divider()
-        st.subheader("Aktivitas Terbaru")
-        latest_activities = df.head(5).copy()
-        latest_activities['Waktu Dibuat'] = latest_activities['created_at'].apply(lambda x: convert_to_wib_and_format(x, format_str='%d %b %Y, %H:%M'))
-        display_cols = ['Waktu Dibuat', 'prospect_name', 'marketer_username', 'status']
-        if all(col in latest_activities.columns for col in display_cols):
-            latest_activities_display = latest_activities[display_cols].rename(columns={'prospect_name': 'Prospek', 'marketer_username': 'Marketing', 'status': 'Status'})
-            latest_activities_display['Status'] = latest_activities_display['Status'].map(STATUS_MAPPING)
-            st.dataframe(latest_activities_display, use_container_width=True, hide_index=True)
-        
-        st.divider()
-        st.subheader("Jadwal Follow-up (7 Hari Mendatang)")
-        all_followups = [fu for act in activities for fu in db.get_followups_by_activity_id(act['id'])]
-        if not all_followups:
-            st.info("Tidak ada jadwal follow-up yang ditemukan.")
-        else:
-            for fu in all_followups:
-                fu['prospect_name'] = next((act['prospect_name'] for act in activities if act['id'] == fu.get('activity_id')), 'N/A')
-            followups_df = pd.DataFrame(all_followups)
-            followups_df['next_followup_date'] = pd.to_datetime(followups_df['next_followup_date'], utc=True, errors='coerce')
-            followups_df.dropna(subset=['next_followup_date'], inplace=True)
-            wib_tz = ZoneInfo("Asia/Jakarta")
-            today = pd.Timestamp.now(tz=wib_tz).normalize()
-            next_7_days = today + pd.Timedelta(days=7)
-            upcoming_df = followups_df[(followups_df['next_followup_date'] >= today) & (followups_df['next_followup_date'] <= next_7_days)].sort_values(by='next_followup_date')
-            if not upcoming_df.empty:
-                upcoming_df['Tanggal'] = upcoming_df['next_followup_date'].dt.tz_convert(wib_tz).dt.strftime('%A, %d %b %Y')
-                display_cols_fu = ['Tanggal', 'prospect_name', 'marketer_username', 'next_action']
-                st.dataframe(upcoming_df[display_cols_fu].rename(columns={'prospect_name': 'Prospek', 'marketer_username': 'Marketing', 'next_action': 'Tindakan'}), use_container_width=True, hide_index=True)
-            else:
-                st.info("Tidak ada jadwal follow-up dalam 7 hari ke depan.")
-
+    
     st.divider()
+
+    # --- KODE UNTUK SINKRONISASI APOLLO DIKEMBALIKAN DI SINI ---
     if st.session_state.profile.get('role') in ['superadmin', 'manager']:
-        st.subheader("Sinkron dari Apollo.io")
-        # Logika sinkronisasi Apollo.io ditempatkan di sini
-        
-def page_activities_management():
-    st.title("Manajemen Aktivitas Pemasaran")
-    activities, _, _ = get_data_based_on_role()
-    valid_activities = [act for act in activities if act and act.get('id')]
-    if not valid_activities:
-        st.info("Belum ada data aktivitas. Silakan tambahkan aktivitas baru di bawah.")
-        st.divider()
-        st.subheader("Form Tambah Aktivitas Baru")
-        show_activity_form(None)
-        return
-
-    df = pd.DataFrame(valid_activities)
-    st.subheader("Semua Catatan Aktivitas")
-    paginated_df_display = df[['activity_date', 'prospect_name', 'prospect_location', 'marketer_username', 'activity_type', 'status']].rename(columns={'activity_date': 'Tanggal', 'prospect_name': 'Prospek', 'prospect_location': 'Lokasi', 'marketer_username': 'Marketing', 'activity_type': 'Jenis', 'status': 'Status'})
-    paginated_df_display['Status'] = paginated_df_display['Status'].map(STATUS_MAPPING)
-    st.dataframe(paginated_df_display, use_container_width=True, hide_index=True)
-
-    st.divider()
-    options = {act['id']: f"{act['prospect_name']} - {act.get('contact_person', 'N/A')}" for act in valid_activities}
-    options[0] = "<< Tambah Aktivitas Baru >>"
-    selected_id = st.selectbox("Pilih aktivitas untuk detail/edit:", options.keys(), format_func=lambda x: options[x], index=0, key="activity_select")
-
-    if selected_id == 0:
-        st.subheader("Form Tambah Aktivitas Baru")
-        show_activity_form(None)
-    else:
-        activity = db.get_activity_by_id(selected_id)
-        if activity:
-            show_activity_form(activity)
-            show_followup_section(activity)
+        with st.container(border=True): # Menggunakan kontainer agar terlihat lebih rapi
+            st.subheader("Sinkron dari Apollo.io")
+            st.info("Tarik data prospek baru langsung dari Apollo.io ke dalam daftar 'Riset Prospek'.")
+            
+            apollo_query = st.text_input(
+                "Masukkan query pencarian Apollo.io",
+                placeholder="Contoh: location:indonesia AND job_titles:founder"
+            )
+            
+            if st.button("Tarik Data dari Apollo.io", type="primary"):
+                if not apollo_query:
+                    st.warning("Query pencarian tidak boleh kosong.")
+                else:
+                    # Kode diagnosis jaringan yang sudah kita buat sebelumnya
+                    st.info("Memulai proses sinkronisasi...")
+                    try:
+                        requests.get("https://www.google.com", timeout=10)
+                        st.success("✔️ Koneksi internet dari server: Stabil.")
+                        
+                        with st.spinner("Menghubungi Apollo.io dan menarik data..."):
+                            raw_prospects = db.sync_prospect_from_apollo(apollo_query)
+                        
+                        if raw_prospects is not None:
+                            st.success(f"✔️ Respon diterima. Ditemukan {len(raw_prospects)} prospek dari Apollo.")
+                            if raw_prospects:
+                                with st.spinner("Menyimpan prospek ke database..."):
+                                    saved_count = 0
+                                    for p in raw_prospects:
+                                        success, _ = db.add_prospect_research(**p)
+                                        if success: saved_count += 1
+                                    st.success(f"{saved_count} dari {len(raw_prospects)} prospek berhasil disimpan ke 'Riset Prospek'.")
+                                clear_all_cache() # Bersihkan cache agar data baru tampil di halaman lain
+                                st.rerun()
+                            else:
+                                st.info("Tidak ada prospek baru yang cocok dengan query Anda.")
+                        else:
+                            # Jika db.sync_prospect_from_apollo mengembalikan None (karena ada error)
+                            st.error("Gagal menarik data. Periksa pesan error di atas bagian ini jika ada.")
+                    except requests.exceptions.Timeout:
+                        st.error("❌ Koneksi internet dari server timeout. Coba lagi dalam beberapa saat.")
+                    except Exception as e:
+                        st.error(f"❌ Terjadi kesalahan jaringan tak terduga: {e}")
 
 def show_activity_form(activity):
     profile = st.session_state.profile

@@ -109,7 +109,7 @@ def show_sidebar():
         st.write(f"Selamat datang, **{profile.get('full_name', 'User')}**!")
         st.write(f"Role: **{profile.get('role', 'N/A').capitalize()}**")
         st.divider()
-        pages = ["Dashboard", "Aktivitas Pemasaran", "Riset Prospek"]
+        pages = ["Dashboard", "Aktivitas Pemasaran"]
         if profile.get('role') in ['superadmin', 'manager']: pages.append("Manajemen Pengguna")
         if profile.get('role') == 'superadmin': pages.append("Pengaturan")
         page = st.radio("Pilih Halaman:", pages, key="page_selection")

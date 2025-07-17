@@ -55,10 +55,28 @@ def show_sidebar():
 
 @st.cache_data(ttl=300)
 def get_data_based_on_role():
-    user = st.session_state.user; profile = st.session_state.profile; role = profile.get('role')
-    if role == 'superadmin': return db.get_all_marketing_activities(), db.get_all_profiles()
-    elif role == 'manager': return db.get_team_marketing_activities(user.id), db.get_team_profiles(user.id)
-    else: return db.get_marketing_activities_by_user_id(user.id), [profile]
+    user = st.session_state.user
+    profile = st.session_state.profile
+    role = profile.get('role')
+
+    if role == 'superadmin':
+        activities = db.get_all_marketing_activities()
+        profiles = db.get_all_profiles()
+        # Untuk konsistensi, kita kembalikan 3 nilai, meskipun satu mungkin kosong
+        prospects = [] # Asumsi riset prospek tidak dipakai
+        return activities, prospects, profiles
+        
+    elif role == 'manager':
+        activities = db.get_team_marketing_activities(user.id)
+        profiles = db.get_team_profiles(user.id)
+        prospects = [] # Asumsi riset prospek tidak dipakai
+        return activities, prospects, profiles
+        
+    else: # marketing
+        activities = db.get_marketing_activities_by_user_id(user.id)
+        profiles = [profile] # Hanya profil diri sendiri
+        prospects = [] # Asumsi riset prospek tidak dipakai
+        return activities, prospects, profiles
 
 # --- FUNGSI UNTUK SETIAP HALAMAN ---
 def page_dashboard():

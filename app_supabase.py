@@ -389,12 +389,11 @@ def page_prospect_research():
     _, prospects, _ = get_data_based_on_role()
     profile = st.session_state.profile
 
-    # Inisialisasi session state untuk preview template email
     if 'preview_content' not in st.session_state: st.session_state.preview_content = ""
     if 'last_selected_id' not in st.session_state: st.session_state.last_selected_id = 0
 
     st.subheader("Cari Prospek")
-    search_query = st.text_input("Ketik nama perusahaan, kontak, industri, atau lokasi untuk mencari...")
+    search_query = st.text_input("Ketik nama perusahaan, kontak, industri, atau lokasi...")
     filtered_prospects = db.search_prospect_research(search_query) if search_query else prospects
 
     st.divider()
@@ -404,7 +403,6 @@ def page_prospect_research():
     else:
         df_prospect = pd.DataFrame(filtered_prospects)
         display_cols = ['company_name', 'contact_name', 'industry', 'status']
-        # Memastikan kolom yang ditampilkan ada di dataframe untuk mencegah error
         display_cols_exist = [col for col in display_cols if col in df_prospect.columns]
         st.dataframe(df_prospect[display_cols_exist].rename(columns={'company_name': 'Perusahaan', 'contact_name': 'Kontak', 'industry': 'Industri', 'status': 'Status'}), use_container_width=True, hide_index=True)
 
@@ -414,15 +412,13 @@ def page_prospect_research():
     options[0] = "<< Tambah Prospek Baru >>"
     selected_id = st.selectbox("Pilih Prospek:", options.keys(), format_func=lambda x: options.get(x, 'N/A'), index=0, key="prospect_select")
 
-    # Logika untuk mereset preview template email jika pilihan berubah
     if st.session_state.last_selected_id != selected_id:
-        st.session_state.preview_content = ""
-        st.session_state.last_selected_id = selected_id
+        st.session_state.preview_content = ""; st.session_state.last_selected_id = selected_id
 
-    # === FORM TAMBAH PROSPEK BARU (LENGKAP) ===
+    # === FORM TAMBAH PROSPEK BARU (dengan logika simpan yang benar) ===
     if selected_id == 0:
         st.subheader("Form Tambah Prospek Baru")
-        with st.form("add_prospect_form", clear_on_submit=True):
+        with st.form("add_prospect_form", clear_on_submit=False): # Ubah ke False agar pesan error tidak hilang
             col1, col2 = st.columns(2)
             with col1:
                 company_name = st.text_input("Nama Perusahaan*")
@@ -439,32 +435,36 @@ def page_prospect_research():
                 phone = st.text_input("Nomor Telepon Kontak")
                 location = st.text_input("Lokasi Kantor (Kota/Negara)")
             
-            st.subheader("Detail Tambahan")
             notes = st.text_area("Catatan Mengenai Prospek")
             next_step = st.text_input("Rencana Langkah Selanjutnya")
             next_step_date = st.date_input("Tanggal Follow-up Selanjutnya", value=None)
-            status = st.selectbox("Status Prospek", ["baru", "dalam_proses", "berhasil", "gagal"], index=0)
+            status = st.selectbox("Status Prospek", ["baru", "dalam_proses", "berhasil", "gagal"])
             source = st.text_input("Sumber Prospek", value="manual")
 
-            submitted = st.form_submit_button("Simpan Prospek Baru")
+            submitted = st.form_submit_button("Simpan Prospek")
             if submitted:
                 if not company_name:
                     st.error("Nama Perusahaan wajib diisi!")
                 else:
-                    success, msg = db.add_prospect_research(
-                        company_name=company_name, website=website, industry=industry, 
-                        founded_year=founded_year, company_size=company_size, revenue=revenue, 
-                        location=location, contact_name=contact_name, contact_title=contact_title, 
-                        contact_email=contact_email, linkedin_url=linkedin_url, phone=phone, 
-                        notes=notes, next_step=next_step, next_step_date=date_to_str(next_step_date), 
-                        status=status, source=source, 
-                        marketer_id=st.session_state.user.id, marketer_username=profile.get("full_name")
-                    )
-                    if success:
-                        st.success(msg)
-                        clear_all_cache() # Hapus cache agar daftar prospek diperbarui
-                    else:
-                        st.error(msg)
+                    with st.spinner("Menyimpan prospek..."):
+                        # Memastikan data pengguna ada sebelum dikirim
+                        user_id = st.session_state.user.id
+                        marketer_name = profile.get("full_name")
+                        
+                        success, msg = db.add_prospect_research(
+                            company_name=company_name, website=website, industry=industry,
+                            founded_year=founded_year, company_size=company_size, revenue=revenue,
+                            location=location, contact_name=contact_name, contact_title=contact_title,
+                            contact_email=contact_email, linkedin_url=linkedin_url, phone=phone,
+                            notes=notes, next_step=next_step, next_step_date=date_to_str(next_step_date),
+                            status=status, source=source,
+                            marketer_id=user_id, marketer_username=marketer_name
+                        )
+                        if success:
+                            st.success(msg)
+                            clear_all_cache() # Hapus cache agar daftar prospek diperbarui
+                        else:
+                            st.error(f"Gagal menyimpan: {msg}")
     
     # === FORM EDIT PROSPEK (LENGKAP) ===
     else:

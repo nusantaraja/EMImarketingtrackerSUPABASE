@@ -292,13 +292,12 @@ def page_activities_management():
             show_activity_form(activity)
             show_followup_section(activity)
 
-
 def show_activity_form(activity):
     profile = st.session_state.profile
     user = st.session_state.user
     
     is_edit_mode = activity is not None
-    form_key = f"activity_form_{activity['id'] if is_edit_mode else 'add'}"
+    form_key = f"activity_form_{activity.get('id') if is_edit_mode else 'add'}"
 
     with st.form(key=form_key, clear_on_submit=False):
         st.subheader("Form Tambah/Edit Aktivitas" if is_edit_mode else "Form Tambah Aktivitas Baru")
@@ -311,8 +310,8 @@ def show_activity_form(activity):
             website = st.text_input("Website", value=activity.get('website', '') if is_edit_mode else "")
             industry = st.text_input("Industri", value=activity.get('industry', '') if is_edit_mode else "")
             founded_year = st.number_input("Tahun Berdiri", min_value=1900, max_value=datetime.now().year + 1, step=1, value=activity.get('founded_year') if is_edit_mode else 2000)
-            company_size = st.text_input("Jumlah Karyawan", value=activity.get('company_size', '') if is_edit_mode else "Contoh: 51-200")
-            revenue = st.text_input("Pendapatan Tahunan", value=activity.get('revenue', '') if is_edit_mode else "Contoh: $10M")
+            company_size = st.text_input("Jumlah Karyawan", value=activity.get('company_size', '') if is_edit_mode else "")
+            revenue = st.text_input("Pendapatan Tahunan", value=activity.get('revenue', '') if is_edit_mode else "")
             source = st.text_input("Sumber Prospek", value=activity.get('source', '') if is_edit_mode else "manual")
         with col2:
             contact_person = st.text_input("Nama Kontak Person", value=activity.get('contact_person', '') if is_edit_mode else "")
@@ -342,7 +341,7 @@ def show_activity_form(activity):
         
         submitted = st.form_submit_button("Simpan Aktivitas")
         
-        # --- PERBAIKAN PENTING DI BLOK DI BAWAH INI ---
+        # --- BLOK LOGIKA PENYIMPANAN YANG SUDAH DIPERBAIKI ---
         if submitted:
             if not prospect_name:
                 st.error("Nama Perusahaan (Prospek) wajib diisi!")
@@ -351,6 +350,7 @@ def show_activity_form(activity):
                     # 'status_key' didefinisikan DI SINI, sebelum digunakan
                     status_key = REVERSE_STATUS_MAPPING.get(status_display)
 
+                    # Semua data dari form disiapkan dalam satu dictionary
                     data_to_send = {
                         "prospect_name": prospect_name, "website": website, "industry": industry,
                         "founded_year": founded_year, "company_size": company_size, "revenue": revenue,
@@ -358,10 +358,10 @@ def show_activity_form(activity):
                         "contact_email": contact_email, "contact_phone": contact_phone, 
                         "linkedin_url": linkedin_url, "prospect_location": prospect_location,
                         "activity_date": date_to_str(activity_date), "activity_type": activity_type,
-                        "description": description, "status": status_key # Sekarang status_key sudah ada
+                        "description": description, "status": status_key
                     }
 
-                    if activity: # Jika ini mode edit
+                    if is_edit_mode: # Jika ini mode edit
                         success, msg = db.edit_marketing_activity(activity['id'], **data_to_send)
                     else: # Jika ini mode tambah baru
                         data_to_send["marketer_id"] = user.id

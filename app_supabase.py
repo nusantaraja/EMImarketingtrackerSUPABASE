@@ -59,6 +59,13 @@ def generate_html_email_template(prospect, user_profile):
     
     return f"""<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;"><h2 style="color: #1f77b4;">Penawaran AI untuk {company_name}</h2><p>Yth. Bapak/Ibu <strong>{contact_name}</strong>,</p>{email_body}<p>Terima kasih atas waktu dan perhatian Anda.</p><p>Hormat saya,</p><p style="margin-bottom: 0;"><strong>{sender_name}</strong></p><p style="margin-top: 0; margin-bottom: 0;"><em>{sender_title}</em></p><p style="margin-top: 0; margin-bottom: 0;"><a href="https://solusiai.id">solusiai.id</a></p>{f'<p style="margin-top: 0;"><a href="{sender_linkedin}">Profil LinkedIn</a></p>' if sender_linkedin else ""}</div>""".strip()
 
+# --- Tambahkan fungsi helper baru ini di app_supabase.py ---
+
+def clear_all_cache():
+    """Membersihkan semua cache di aplikasi Streamlit."""
+    st.cache_data.clear()
+    st.cache_resource.clear()
+
 # --- Halaman & Fungsi Utama ---
 
 def show_login_page():
@@ -310,16 +317,27 @@ def show_activity_form(activity):
         description = st.text_area("Deskripsi", value=activity.get('description', '') if activity else "", height=150)
         
         submitted = st.form_submit_button("Simpan Perubahan" if activity else "Simpan Aktivitas Baru")
-        if submitted:
-            if not prospect_name: st.error("Nama Prospek wajib diisi!")
+    if submitted:
+        if not prospect_name: st.error("Nama Prospek wajib diisi!")
+        else:
+            status_key = REVERSE_STATUS_MAPPING[status_display]
+            if activity:
+                success, msg = db.edit_marketing_activity(
+                    activity_id=activity['id'], # Menggunakan argumen kata kunci lebih aman
+                    #... (argumen lain)
+                )
             else:
-                status_key = REVERSE_STATUS_MAPPING[status_display]
-                if activity:
-                    success, msg = db.edit_marketing_activity(activity['id'], prospect_name, prospect_location, contact_person, contact_position, contact_phone, contact_email, date_to_str(activity_date), activity_type, description, status_key)
-                else:
-                    success, msg, _ = db.add_marketing_activity(user.id, profile.get('full_name'), prospect_name, prospect_location, contact_person, contact_position, contact_phone, contact_email, date_to_str(activity_date), activity_type, description, status_key)
-                if success: st.success(msg); st.rerun()
-                else: st.error(msg)
+                success, msg, _ = db.add_marketing_activity(
+                    #... (argumen Anda)
+                )
+
+            if success: 
+                st.success(msg)
+                # --- PERUBAHAN UTAMA ---
+                clear_all_cache()  # Hapus cache setelah data berhasil diubah
+                st.rerun()
+            else: 
+                st.error(msg)
 
 def show_followup_section(activity):
     st.divider()
@@ -336,11 +354,16 @@ def show_followup_section(activity):
         new_status_display = st.selectbox("Update Status", options=list(STATUS_MAPPING.values()), index=list(STATUS_MAPPING.values()).index(STATUS_MAPPING.get(activity.get('status', 'baru'), 'Baru')))
         
         if st.form_submit_button("Simpan Follow-up"):
-            if not notes: st.warning("Catatan tidak boleh kosong.")
+        if not notes: st.warning("Catatan tidak boleh kosong.")
+        else:
+            success, msg = db.add_followup(...)
+            if success:
+                st.success(msg)
+                # --- PERUBAHAN UTAMA ---
+                clear_all_cache()  # Hapus cache setelah follow-up ditambahkan
+                st.rerun()
             else:
-                success, msg = db.add_followup(activity['id'], st.session_state.user.id, st.session_state.profile.get('full_name'), notes, next_action, next_followup_date, interest_level, REVERSE_STATUS_MAPPING[new_status_display])
-                if success: st.success(msg); st.rerun()
-                else: st.error(msg)
+                st.error(msg)
 
 def page_prospect_research():
     st.title("Riset Prospek 🔍💼")
